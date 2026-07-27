@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Anthropic
-    anthropic_api_key: str
+    anthropic_api_key: str = ""
 
     # Twilio (2FA)
     twilio_account_sid: str = ""
