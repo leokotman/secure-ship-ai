@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "secureship"
+version = "0.1.0"
+description = "AI-gated shipment support chat"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.109.0",
+    "uvicorn[standard]==0.27.0",
+    "python-dotenv==1.0.0",
+    "pydantic==2.6.1",
+    "pydantic-settings==2.1.0",
+    "httpx==0.25.2",
+    "anthropic==0.35.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.4",
+    "pytest-asyncio==0.23.2",
+    "black==24.1.1",
+    "ruff==0.2.2",
+    "mypy==1.8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
