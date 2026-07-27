@@ -6,6 +6,9 @@ import anthropic
 
 from secureship.config import settings
 
+# Use the most cost-effective model; upgrade to sonnet/opus only if needed
+DEFAULT_MODEL = "claude-3-5-haiku-20241022"
+
 
 def get_chat_response(messages: list[dict[str, Any]]) -> str:
     """
@@ -20,7 +23,7 @@ def get_chat_response(messages: list[dict[str, Any]]) -> str:
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     response = client.messages.create(
-        model="claude-opus-4-1-20250805",
+        model=DEFAULT_MODEL,
         max_tokens=1024,
         system="You are SecureShip, a helpful shipment support bot. "
         "Help customers check their shipment status. "
@@ -30,8 +33,8 @@ def get_chat_response(messages: list[dict[str, Any]]) -> str:
     )
 
     text_block = response.content[0]
-    if hasattr(text_block, "text"):
-        return cast(str, text_block.text)
+    if isinstance(text_block, anthropic.types.TextBlock):
+        return text_block.text
     return str(text_block)
 
 
@@ -50,7 +53,7 @@ def stream_chat_response(messages: list[dict[str, Any]]) -> Generator[str, None,
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     with client.messages.stream(
-        model="claude-opus-4-1-20250805",
+        model=DEFAULT_MODEL,
         max_tokens=1024,
         system="You are SecureShip, a helpful shipment support bot. "
         "Help customers check their shipment status. "
