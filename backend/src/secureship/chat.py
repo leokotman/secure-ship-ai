@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from secureship.config import settings
+from .config import settings
 
 # NOTE: will be replaced with the full SECURITY RULES block in Week 2
 SYSTEM_PROMPT = (

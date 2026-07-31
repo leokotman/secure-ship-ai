@@ -1,7 +1,13 @@
-.PHONY: help install dev test lint format clean
+.PHONY: help install dev test lint format clean start stop nuke seed
 
 help:
 	@echo "SecureShip Monorepo Commands"
+	@echo ""
+	@echo "everyday:"
+	@echo "  make start         - Start Ollama + Docker stack (app on :3000)"
+	@echo "  make stop          - Stop Docker stack + Ollama"
+	@echo "  make nuke          - stop + wipe database volume (fresh slate)"
+	@echo "  make seed          - Seed DB with sample data (run once while stack is up)"
 	@echo ""
 	@echo "setup commands:"
 	@echo "  make install       - Install dependencies (backend + frontend)"
@@ -18,12 +24,31 @@ help:
 	@echo ""
 	@echo "cleanup:"
 	@echo "  make clean         - Clean build artifacts"
-	@echo ""
-	@echo "docker:"
-	@echo "  make docker-up     - Start services with Docker Compose (Week 3+)"
-	@echo "  make docker-down   - Stop Docker Compose services"
 
-install:
+start:
+	@echo "Starting Ollama..."
+	@ollama serve &>/dev/null & sleep 2; true
+	@echo "Starting Docker stack..."
+	docker compose up --build
+
+stop:
+	@echo "Stopping Docker stack..."
+	docker compose down
+	@echo "Stopping Ollama..."
+	@pkill ollama || true
+	@echo "Done."
+
+# Wipe the database volume — all data will be lost
+nuke:
+	docker compose down -v
+	@pkill ollama || true
+	@echo "Stack stopped and database volume removed."
+
+seed:
+	DATABASE_URL=postgresql://postgres:postgres@localhost:5432/secureship \
+	  python scripts/seed_data.py
+
+
 	@echo "Installing backend..."
 	cd backend && pip install -e ".[dev]"
 	@echo "Installing frontend..."

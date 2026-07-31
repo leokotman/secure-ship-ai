@@ -10,6 +10,8 @@ const BACKEND_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL ||
     'http://localhost:8000';
 
+const GENERIC_CHAT_ERROR = 'Chat service is temporarily unavailable. Please try again.';
+
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
@@ -45,15 +47,21 @@ export default async function handler(
 
         if (!upstreamResponse.ok) {
             const errorText = await upstreamResponse.text();
+            console.error('Upstream chat request failed', {
+                status: upstreamResponse.status,
+                statusText: upstreamResponse.statusText,
+                body: errorText,
+            });
             res.status(upstreamResponse.status).json({
-                error: errorText || `Upstream chat error: ${upstreamResponse.statusText}`,
+                error: GENERIC_CHAT_ERROR,
             });
             return;
         }
 
         const reader = upstreamResponse.body?.getReader();
         if (!reader) {
-            res.status(502).json({ error: 'Upstream response body is not readable' });
+            console.error('Upstream response body is not readable');
+            res.status(502).json({ error: GENERIC_CHAT_ERROR });
             return;
         }
 
@@ -80,8 +88,7 @@ export default async function handler(
             res.end();
         }
     } catch (error) {
-        const message =
-            error instanceof Error ? error.message : 'Failed to reach chat service';
-        res.status(502).json({ error: message });
+        console.error('Failed to reach upstream chat service', error);
+        res.status(502).json({ error: GENERIC_CHAT_ERROR });
     }
 }

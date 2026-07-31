@@ -1,15 +1,18 @@
 """FastAPI application entry point."""
 
+import logging
 import uuid
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from secureship.chat import stream_chat_response
-from secureship.config import settings
-from secureship.database import append_chat_turn, create_tables
+from .chat import stream_chat_response
+from .config import settings
+from .database import append_chat_message, create_tables
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SecureShip", version="0.1.0")
 
@@ -56,18 +59,39 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     session_id = request.session_id or str(uuid.uuid4())
     messages = [{"role": "user", "content": request.message}]
 
+    # Persist the user turn before streaming so crashes/disconnects still retain input.
+    try:
+        await append_chat_message(
+            session_id=session_id,
+            role="user",
+            content=request.message,
+        )
+    except Exception:
+        logger.exception("Failed to persist user message for session_id=%s", session_id)
+        raise HTTPException(
+            status_code=503, detail="Chat service is temporarily unavailable"
+        )
+
     async def generate():
         assistant_chunks: list[str] = []
-        for chunk in stream_chat_response(messages):
-            assistant_chunks.append(chunk)
-            yield chunk
-
-        assistant_message = "".join(assistant_chunks)
-        await append_chat_turn(
-            session_id=session_id,
-            user_message=request.message,
-            assistant_message=assistant_message,
-        )
+        try:
+            for chunk in stream_chat_response(messages):
+                assistant_chunks.append(chunk)
+                yield chunk
+        finally:
+            assistant_message = "".join(assistant_chunks)
+            if assistant_message:
+                try:
+                    await append_chat_message(
+                        session_id=session_id,
+                        role="assistant",
+                        content=assistant_message,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to persist assistant message for session_id=%s",
+                        session_id,
+                    )
 
     response = StreamingResponse(generate(), media_type="text/event-stream")
     response.headers["x-session-id"] = session_id

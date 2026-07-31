@@ -2,14 +2,14 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import DateTime, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from secureship.config import settings
+from .config import settings
 
 
 class Base(DeclarativeBase):
@@ -76,6 +76,33 @@ async def append_chat_turn(
             transcript = list(record.transcript)
             transcript.append({"role": "user", "content": user_message})
             transcript.append({"role": "assistant", "content": assistant_message})
+            record.transcript = transcript
+
+        await db.commit()
+
+
+async def append_chat_message(
+    session_id: str, role: Literal["user", "assistant"], content: str
+) -> None:
+    """Append a single message to the persisted transcript for a session."""
+    if not content:
+        return
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.session_id == session_id)
+        )
+        record = result.scalar_one_or_none()
+
+        if record is None:
+            record = ChatSession(
+                session_id=session_id,
+                transcript=[{"role": role, "content": content}],
+            )
+            db.add(record)
+        else:
+            transcript = list(record.transcript)
+            transcript.append({"role": role, "content": content})
             record.transcript = transcript
 
         await db.commit()
