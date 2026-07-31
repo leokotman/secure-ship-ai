@@ -1,5 +1,8 @@
 .PHONY: help install dev test lint format clean
 
+VENV := ../.venv
+PYTHON ?= $(VENV)/bin/python3
+
 help:
 	@echo "SecureShip Backend Commands"
 	@echo "install       - Install dependencies"
@@ -10,7 +13,7 @@ help:
 	@echo "clean         - Clean build artifacts"
 
 install:
-	pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev]"
 
 dev:
 	uvicorn secureship.main:app --reload --host 0.0.0.0 --port 8000

@@ -11,8 +11,14 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
 
-    # Anthropic
-    anthropic_api_key: str = ""
+    # Database
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/secureship"
+    )
+
+    # Ollama
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "qwen3:8b"
 
     # Twilio (2FA)
     twilio_account_sid: str = ""

@@ -10,6 +10,7 @@ interface Message {
 }
 
 export function ChatWindow() {
+  const [sessionId, setSessionId] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +24,13 @@ export function ChatWindow() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const storedSessionId = window.localStorage.getItem('secureship_session_id');
+    if (storedSessionId) {
+      setSessionId(storedSessionId);
+    }
+  }, []);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +51,8 @@ export function ChatWindow() {
     let fullResponse = '';
 
     try {
-      await streamChat(
-        { message: input },
+      const nextSessionId = await streamChat(
+        { message: input, session_id: sessionId || undefined },
         (chunk) => {
           fullResponse += chunk;
           setMessages((prev) => {
@@ -67,6 +75,11 @@ export function ChatWindow() {
           });
         }
       );
+
+      if (nextSessionId && nextSessionId !== sessionId) {
+        setSessionId(nextSessionId);
+        window.localStorage.setItem('secureship_session_id', nextSessionId);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -106,16 +119,14 @@ export function ChatWindow() {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${
-              msg.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'
+              }`}
           >
             <div
-              className={`max-w-xs px-4 py-2 rounded-lg ${
-                msg.role === 'user'
+              className={`max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user'
                   ? 'bg-blue-600 text-white'
                   : 'bg-white text-gray-900 border border-gray-200'
-              }`}
+                }`}
             >
               <p className="text-sm leading-relaxed">{msg.content}</p>
             </div>

@@ -17,7 +17,7 @@ export interface ChatRequest {
 export async function streamChat(
   request: ChatRequest,
   onChunk: (chunk: string) => void
-): Promise<void> {
+): Promise<string | undefined> {
   // Browser only talks to the local BFF route; backend URL stays server-side.
   const response = await fetch('/api/chat', {
     method: 'POST',
@@ -46,6 +46,9 @@ export async function streamChat(
       const chunk = decoder.decode(value, { stream: true });
       onChunk(chunk);
     }
+
+    const sessionId = response.headers.get('x-session-id') || undefined;
+    return sessionId;
   } finally {
     reader.releaseLock();
   }

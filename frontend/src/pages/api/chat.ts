@@ -58,9 +58,13 @@ export default async function handler(
         }
 
         const contentType = upstreamResponse.headers.get('content-type');
+        const sessionId = upstreamResponse.headers.get('x-session-id');
         res.status(200);
         res.setHeader('Content-Type', contentType || 'text/event-stream; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
+        if (sessionId) {
+            res.setHeader('x-session-id', sessionId);
+        }
 
         try {
             while (true) {
