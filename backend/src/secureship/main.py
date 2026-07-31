@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from secureship.chat import stream_chat_response
 from secureship.config import settings
@@ -23,7 +23,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     """Chat request payload."""
 
-    message: str
+    message: str = Field(..., min_length=1, max_length=4000)
     session_id: str | None = None
 
 
