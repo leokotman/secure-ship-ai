@@ -11,10 +11,16 @@ from typing import Any
 
 from sqlalchemy import text
 
-from .identity import verify_identity_db
 from .database import AsyncSessionLocal
+from .identity import verify_identity_db
 from .session import Session, SessionState, session_manager
 from .sms import CODE_EXPIRY_MINUTES, MAX_CODE_ATTEMPTS, generate_code, send_sms
+
+_MAX_CASE_FACT_DEPTH = 4
+_MAX_CASE_FACT_LIST_ITEMS = 50
+_MAX_CASE_FACT_DICT_ITEMS = 100
+_MAX_CASE_FACT_KEY_LENGTH = 80
+_MAX_CASE_FACT_STRING_LENGTH = 500
 
 # ── Ollama-compatible tool schema definitions ─────────────────────────────────
 
@@ -280,6 +286,9 @@ def _check_verification_code(session: Session, code: str) -> dict[str, Any]:
     session.code_attempts += 1
     session_manager.update(session)
 
+    # NOTE(security-review): this currently locks out only after exceeding MAX,
+    # meaning the effective cutoff is on the next attempt after the configured
+    # value. Kept intentionally for now; revisit when product policy is finalized.
     if session.code_attempts > MAX_CODE_ATTEMPTS:
         return {
             "status": "max_attempts_exceeded",
@@ -391,8 +400,53 @@ def _update_case_facts(session: Session, args: dict[str, Any]) -> dict[str, Any]
     Existing keys are kept; arrays are replaced (not appended) so the model can
     correct mistakes. Returns the full updated block so the model can confirm.
     """
-    # Drop None values the model may send for unused fields
-    updates = {k: v for k, v in args.items() if v is not None}
+    # Security hardening: keep keys dynamic, but sanitize untrusted model output
+    # before persisting and reinjecting it into future prompts.
+    updates: dict[str, Any] = {}
+    for raw_key, raw_value in args.items():
+        if raw_value is None:
+            continue
+        key = str(raw_key).strip().replace("\x00", "")[:_MAX_CASE_FACT_KEY_LENGTH]
+        if not key:
+            continue
+        updates[key] = _sanitize_case_fact_value(raw_value)
+
     session.case_facts.update(updates)
     session_manager.update(session)
     return {"status": "ok", "case_facts": session.case_facts}
+
+
+def _sanitize_case_fact_value(value: Any, depth: int = 0) -> Any:
+    """Sanitize arbitrary JSON-like values from tool arguments.
+
+    Keeps key/value flexibility while enforcing bounded, prompt-safe content.
+    """
+    if depth > _MAX_CASE_FACT_DEPTH:
+        return ""
+
+    if isinstance(value, str):
+        return value.strip().replace("\x00", "")[:_MAX_CASE_FACT_STRING_LENGTH]
+
+    if isinstance(value, (bool, int, float)):
+        return value
+
+    if isinstance(value, list):
+        sanitized_items = [
+            _sanitize_case_fact_value(item, depth + 1)
+            for item in value[:_MAX_CASE_FACT_LIST_ITEMS]
+        ]
+        return [item for item in sanitized_items if item not in (None, "")]
+
+    if isinstance(value, dict):
+        sanitized_dict: dict[str, Any] = {}
+        for raw_key, raw_val in list(value.items())[:_MAX_CASE_FACT_DICT_ITEMS]:
+            key = str(raw_key).strip().replace("\x00", "")[:_MAX_CASE_FACT_KEY_LENGTH]
+            if not key:
+                continue
+            sanitized = _sanitize_case_fact_value(raw_val, depth + 1)
+            if sanitized in (None, ""):
+                continue
+            sanitized_dict[key] = sanitized
+        return sanitized_dict
+
+    return str(value).strip().replace("\x00", "")[:_MAX_CASE_FACT_STRING_LENGTH]

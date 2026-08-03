@@ -186,6 +186,10 @@ async def get_session(session_id: str) -> SessionResponse:
 
     Called by the frontend on mount to re-hydrate state and message history
     when the user reloads the page mid-conversation.
+
+    TODO(week-3-auth): protect this endpoint with authenticated session context
+    instead of session_id-only access. Current behavior is acceptable for Week 2
+    scaffolding but not for production-grade access control.
     """
     db_state, _, _ = await load_session_data(session_id)
     safe_state = _normalize_rehydrated_state(db_state)

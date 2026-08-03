@@ -155,6 +155,8 @@ NB: this dev_plan was written in the beginning of the project, based on the @doc
 - [ ] Alembic migrations
 
 ### Backend Enhancements
+- [ ] Add customer-facing authentication (account signup/login/logout + server-side session binding) before exposing persisted transcript/session endpoints broadly.
+  Rationale: Week 2 currently relies on session_id-only retrieval for rehydration, which is acceptable for local scaffolding but should be replaced with authenticated access control.
 - [ ] SQLAlchemy models for all tables above
 - [ ] Shipment data tools exposed to the LLM (all scoped to `session.customer_id` — **never a model- or user-supplied ID**):
   - `lookup_shipments(session_id)` — returns all shipments for `session.customer_id`

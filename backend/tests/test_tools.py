@@ -149,7 +149,11 @@ def test_check_code_expired(session_with_pending_customer: Session) -> None:
 def test_check_code_max_attempts_exceeded(
     session_with_pending_customer: Session,
 ) -> None:
-    """Exceeding attempt limit returns max_attempts_exceeded regardless of code."""
+    """Exceeding attempt limit returns max_attempts_exceeded regardless of code.
+
+    NOTE: Current implementation triggers lockout only after attempts exceed MAX.
+    This preserves existing behavior until product policy confirms cutoff semantics.
+    """
     session_with_pending_customer.sms_code = "123456"
     session_with_pending_customer.code_sent_at = datetime.now(timezone.utc)
     session_with_pending_customer.code_attempts = 3  # already at MAX

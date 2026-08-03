@@ -29,17 +29,21 @@ def send_sms(phone: str, code: str) -> None:
 
 
 def _send_mock(phone: str, code: str) -> None:
-    logger.info("SMS [MOCK] → %s  code=%s", phone, code)
-    # Print visibly so devs can see the code without searching log files
-    print(f"\n{'='*50}")
-    print(f"  SMS [MOCK] → {phone}")
-    print(f"  SecureShip code: {code}  (expires in {CODE_EXPIRY_MINUTES} min)")
-    print(f"{'='*50}\n", flush=True)
+    reveal_code = settings.sms_log_verification_code or settings.debug
+    if reveal_code:
+        logger.info("SMS [MOCK] -> %s  code=%s", phone, code)
+        # Local-only helper for manual testing when explicit logging is enabled.
+        print(f"\n{'='*50}")
+        print(f"  SMS [MOCK] -> {phone}")
+        print(f"  SecureShip code: {code}  (expires in {CODE_EXPIRY_MINUTES} min)")
+        print(f"{'='*50}\n", flush=True)
+    else:
+        logger.info("SMS [MOCK] -> %s  code=<redacted>", phone)
 
 
 def _send_twilio(phone: str, code: str) -> None:
     try:
-        from twilio.rest import Client  # type: ignore[import-untyped]
+        from twilio.rest import Client  # type: ignore[import-not-found,import-untyped]
 
         client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
         client.messages.create(
