@@ -10,11 +10,19 @@ from pydantic import BaseModel, Field
 
 from .chat import stream_chat_response
 from .config import settings
-from .database import append_chat_message, create_tables
+from .database import (
+    append_chat_message,
+    create_tables,
+    get_transcript,
+    load_session_data,
+    update_session_state,
+)
+from .session import SessionState, session_manager
+from .tools import execute_tool
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SecureShip", version="0.1.0")
+app = FastAPI(title="SecureShip", version="0.2.0")
 
 # CORS middleware
 app.add_middleware(
@@ -33,6 +41,18 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
 
 
+class VerifySmsRequest(BaseModel):
+    """Explicit SMS code verification from the frontend modal."""
+
+    session_id: str = Field(..., min_length=1)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class VerifySmsResponse(BaseModel):
+    verified: bool
+    state: str
+
+
 @app.on_event("startup")
 async def startup_event() -> None:
     """Create required database tables when the app starts."""
@@ -42,24 +62,38 @@ async def startup_event() -> None:
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check endpoint."""
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.2.0"}
 
 
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
-    """
-    Chat endpoint that streams Claude responses.
+    """Chat endpoint — streams Ollama response with tool-calling loop.
 
-    Args:
-        request: Chat request with message and optional session_id
+    Loads full conversation history from DB so the model has context for the
+    whole identity verification flow, not just the current turn.
 
-    Returns:
-        Streaming response with text chunks from Claude
+    The final chunk in the stream is a null-byte prefixed JSON metadata event
+    carrying the updated session state so the frontend can update its store.
     """
     session_id = request.session_id or str(uuid.uuid4())
-    messages = [{"role": "user", "content": request.message}]
+    session = session_manager.get_or_create(session_id)
 
-    # Persist the user turn before streaming so crashes/disconnects still retain input.
+    # Restore durable state + case facts from DB (survives server restarts)
+    try:
+        db_state, db_customer_id, db_case_facts = await load_session_data(session_id)
+        if session.state == SessionState.ANONYMOUS and db_state != "anonymous":
+            session.state = SessionState(db_state)
+        if session.customer_id is None and db_customer_id is not None:
+            session.customer_id = db_customer_id
+        if not session.case_facts and db_case_facts:
+            session.case_facts = db_case_facts
+        session_manager.update(session)
+    except Exception:
+        logger.exception(
+            "Failed to load session data from DB for session_id=%s", session_id
+        )
+
+    # Persist user turn before streaming so DB has it even if the stream fails
     try:
         await append_chat_message(
             session_id=session_id,
@@ -72,12 +106,23 @@ async def chat(request: ChatRequest) -> StreamingResponse:
             status_code=503, detail="Chat service is temporarily unavailable"
         )
 
-    async def generate():
+    # Load full conversation history (FC #2 — full context for the tool loop)
+    try:
+        messages = await get_transcript(session_id)
+    except Exception:
+        logger.exception("Failed to load transcript for session_id=%s", session_id)
+        messages = [{"role": "user", "content": request.message}]
+
+    async def generate():  # type: ignore[return]
         assistant_chunks: list[str] = []
         try:
-            for chunk in stream_chat_response(messages):
-                assistant_chunks.append(chunk)
-                yield chunk
+            async for chunk in stream_chat_response(messages, session_id, session):
+                if chunk.startswith("\x00"):
+                    # State metadata event — pass through but don't add to transcript
+                    yield chunk
+                else:
+                    assistant_chunks.append(chunk)
+                    yield chunk
         finally:
             assistant_message = "".join(assistant_chunks)
             if assistant_message:
@@ -92,10 +137,60 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                         "Failed to persist assistant message for session_id=%s",
                         session_id,
                     )
+            # Sync final session state + case facts to DB
+            updated = session_manager.get(session_id) or session
+            try:
+                await update_session_state(
+                    session_id,
+                    updated.state.value,
+                    updated.customer_id,
+                    updated.case_facts or None,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to sync session state for session_id=%s", session_id
+                )
 
     response = StreamingResponse(generate(), media_type="text/event-stream")
     response.headers["x-session-id"] = session_id
+    # Header carries the state at request-start; the null-byte event carries the final state
+    response.headers["x-session-state"] = session.state.value
     return response
+
+
+@app.post("/verify-sms", response_model=VerifySmsResponse)
+async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
+    """Explicit SMS code verification — called directly from the frontend modal.
+
+    Delegates to the same `check_verification_code` tool used in the chat flow
+    so the logic and limits (expiry, max attempts) are enforced in one place.
+    """
+    result = await execute_tool(
+        "check_verification_code",
+        {"code": request.code},
+        request.session_id,
+    )
+    updated = session_manager.get(request.session_id)
+    state = updated.state.value if updated else SessionState.ANONYMOUS.value
+
+    # Sync to DB regardless of outcome
+    if updated:
+        try:
+            await update_session_state(
+                request.session_id,
+                updated.state.value,
+                updated.customer_id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to sync session state after /verify-sms for session_id=%s",
+                request.session_id,
+            )
+
+    return VerifySmsResponse(
+        verified=(result.get("status") == "verified"),
+        state=state,
+    )
 
 
 if __name__ == "__main__":

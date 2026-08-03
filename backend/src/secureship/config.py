@@ -1,10 +1,16 @@
 """Configuration management."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore",  # silently ignore unknown env vars (e.g. legacy ANTHROPIC_API_KEY)
+    )
 
     # Server
     host: str = "0.0.0.0"
@@ -29,10 +35,6 @@ class Settings(BaseSettings):
     auth0_domain: str = ""
     auth0_client_id: str = ""
     auth0_client_secret: str = ""
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 settings = Settings()
