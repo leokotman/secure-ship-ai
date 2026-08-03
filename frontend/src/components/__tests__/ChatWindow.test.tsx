@@ -122,4 +122,28 @@ describe('ChatWindow', () => {
             );
         });
     });
+
+    it('closes verification modal after max attempts lockout', async () => {
+        useSessionStore.setState({
+            sessionId: 'sess-lockout',
+            chatState: 'awaiting_code',
+            firstName: null,
+        });
+
+        mockVerifySmsCode.mockResolvedValue({
+            verified: false,
+            state: 'collecting_identity',
+            reason: 'max_attempts_exceeded',
+        });
+
+        render(<ChatWindow />);
+
+        const codeInput = await screen.findByPlaceholderText('000000');
+        fireEvent.change(codeInput, { target: { value: '999999' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
+
+        await waitFor(() => {
+            expect(screen.queryByPlaceholderText('000000')).not.toBeInTheDocument();
+        });
+    });
 });

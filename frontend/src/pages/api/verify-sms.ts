@@ -42,6 +42,10 @@ export default async function handler(
         const data = await upstream.json();
 
         if (!upstream.ok) {
+            if (data && typeof data === 'object') {
+                res.status(upstream.status).json(data);
+                return;
+            }
             res.status(upstream.status).json({ error: GENERIC_ERROR });
             return;
         }

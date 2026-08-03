@@ -54,7 +54,12 @@ def _send_twilio(phone: str, code: str) -> None:
             from_=settings.twilio_phone_number,
             to=phone,
         )
-        logger.info("SMS [Twilio] → %s  sent", phone)
+        if settings.sms_log_verification_code or settings.debug:
+            logger.info("SMS [Twilio] -> %s  sent code=%s", phone, code)
+            # Print to stdout so container logs always show the code in local/dev when enabled.
+            print(f"SMS [Twilio] -> {phone}  code={code}", flush=True)
+        else:
+            logger.info("SMS [Twilio] -> %s  sent code=<redacted>", phone)
     except ImportError:
         logger.warning("twilio package not installed — falling back to mock SMS")
         _send_mock(phone, code)

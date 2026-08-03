@@ -54,6 +54,13 @@ State: {state}
 - For the code entry step, tell the customer to enter the code in the box shown,
   or type it in the chat.
 - After verification, acknowledge it and ask how you can help.
+- When a verified customer asks about shipment status and provides a tracking
+    number, you MUST call `get_shipment_by_tracking_number` before answering.
+- If a shipment lookup tool returns `not_found` or `unavailable`, clearly say
+    you could not retrieve shipment details right now and ask the customer to
+    confirm the tracking number.
+- Never invent or guess shipment statuses, dates, or addresses. Only report
+    fields that appear in tool output.
 - If a verified customer asks for their latest/recent shipment and does not know
     an order ID or tracking number, call `get_latest_shipment` and share that result.\
 """

@@ -122,45 +122,38 @@ async def test_get_session_masks_ephemeral_states() -> None:
 
 
 @pytest.mark.asyncio
-async def test_verify_sms_resends_code_when_state_is_code_sent() -> None:
-    """If no active code exists but state=code_sent, verify endpoint resends OTP."""
-    session = Session(session_id="sess-resend")
+async def test_verify_sms_returns_conflict_when_no_active_code() -> None:
+    """Missing active OTP should be a 409 response with a machine-readable reason."""
+    session = Session(session_id="sess-no-code")
     session.state = SessionState.CODE_SENT
-    session.pending_customer_id = uuid.uuid4()
-    session.phone = "+14155550005"
 
     with (
-        patch(
-            "secureship.main.session_manager.get",
-            side_effect=[session, session],
-        ),
+        patch("secureship.main.session_manager.get", return_value=session),
         patch(
             "secureship.main.execute_tool",
             new=AsyncMock(
-                side_effect=[
-                    {
-                        "status": "error",
-                        "message": "No verification code has been sent",
-                    },
-                    {"status": "code_sent", "expires_in_minutes": 10},
-                ]
+                return_value={
+                    "status": "error",
+                    "message": "No verification code has been sent",
+                }
             ),
         ) as mock_execute,
         patch("secureship.main.update_session_state", new=AsyncMock()),
     ):
         response = await verify_sms(
-            VerifySmsRequest(session_id="sess-resend", code="111111")
+            VerifySmsRequest(session_id="sess-no-code", code="111111")
         )
 
-    assert response.verified is False
-    assert response.state == SessionState.CODE_SENT.value
-    assert response.reason == "code_resent"
-    assert mock_execute.await_count == 2
+    assert response.status_code == 409
+    assert response.body is not None
+    assert b'"reason":"no_active_code"' in response.body
+    assert b'"verified":false' in response.body
+    mock_execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_verify_sms_incorrect_code_returns_reason() -> None:
-    """Incorrect code path should report reason for better UX messaging."""
+    """Incorrect code should return a 401 with reason for better UX messaging."""
     session = Session(session_id="sess-incorrect")
     session.state = SessionState.AWAITING_CODE
 
@@ -176,5 +169,7 @@ async def test_verify_sms_incorrect_code_returns_reason() -> None:
             VerifySmsRequest(session_id="sess-incorrect", code="000000")
         )
 
-    assert response.verified is False
-    assert response.reason == "incorrect_code"
+    assert response.status_code == 401
+    assert response.body is not None
+    assert b'"reason":"incorrect_code"' in response.body
+    assert b'"verified":false' in response.body

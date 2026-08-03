@@ -118,6 +118,26 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_shipment_by_tracking_number",
+            "description": (
+                "Get a verified customer's shipment by tracking number. "
+                "Uses server-side session identity and ignores any customer IDs."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tracking_number": {
+                        "type": "string",
+                        "description": "Tracking number provided by the customer",
+                    }
+                },
+                "required": ["tracking_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_latest_shipment",
             "description": (
                 "Get the verified customer's most recent shipment when they do not "
@@ -207,6 +227,10 @@ async def execute_tool(
         return _check_verification_code(session, str(args.get("code", "")))
     if name == "escalate_to_human":
         return _escalate_to_human(session)
+    if name == "get_shipment_by_tracking_number":
+        return await _get_shipment_by_tracking_number(
+            session, str(args.get("tracking_number", ""))
+        )
     if name == "get_latest_shipment":
         return await _get_latest_shipment(session)
     if name == "update_case_facts":
@@ -241,7 +265,11 @@ async def _verify_identity(session: Session, args: dict[str, Any]) -> dict[str, 
         session.pending_customer_id = customer_id
         session.state = SessionState.CODE_SENT
         session_manager.update(session)
-        # Neutral language — never "found" or "matched"
+        # Issue OTP immediately on the server side so delivery does not depend
+        # on an additional model-initiated tool call.
+        send_result = await _send_verification_code(session)
+        if send_result.get("status") in {"code_sent", "code_already_sent"}:
+            return send_result
         return {"status": "ready_for_code", "next_step": "send_verification_code"}
 
     # Neutral failure — no "customer not found" wording (enumeration risk)
@@ -251,6 +279,18 @@ async def _verify_identity(session: Session, args: dict[str, Any]) -> dict[str, 
 async def _send_verification_code(session: Session) -> dict[str, Any]:
     if not session.pending_customer_id:
         return {"status": "error", "message": "Identity not yet confirmed"}
+
+    if (
+        session.sms_code
+        and session.code_sent_at
+        and session.state == SessionState.AWAITING_CODE
+    ):
+        elapsed = (datetime.now(timezone.utc) - session.code_sent_at).total_seconds()
+        if elapsed <= CODE_EXPIRY_MINUTES * 60:
+            return {
+                "status": "code_already_sent",
+                "expires_in_minutes": CODE_EXPIRY_MINUTES,
+            }
 
     code = generate_code()
     phone = session.phone or ""
@@ -286,10 +326,12 @@ def _check_verification_code(session: Session, code: str) -> dict[str, Any]:
     session.code_attempts += 1
     session_manager.update(session)
 
-    # NOTE(security-review): this currently locks out only after exceeding MAX,
-    # meaning the effective cutoff is on the next attempt after the configured
-    # value. Kept intentionally for now; revisit when product policy is finalized.
-    if session.code_attempts > MAX_CODE_ATTEMPTS:
+    if session.code_attempts >= MAX_CODE_ATTEMPTS:
+        session.sms_code = None
+        session.code_sent_at = None
+        session.code_attempts = 0
+        session.state = SessionState.COLLECTING_IDENTITY
+        session_manager.update(session)
         return {
             "status": "max_attempts_exceeded",
             "message": "Too many incorrect attempts. Please start over.",
@@ -332,6 +374,29 @@ async def _get_latest_shipment(session: Session) -> dict[str, Any]:
     return {"status": "ok", "shipment": shipment}
 
 
+async def _get_shipment_by_tracking_number(
+    session: Session, tracking_number: str
+) -> dict[str, Any]:
+    """Return one verified customer's shipment matched by tracking number."""
+    if not session.verified or session.customer_id is None:
+        return {"status": "not_verified", "shipment": None}
+
+    normalized = tracking_number.strip()
+    if not normalized:
+        return {"status": "missing_tracking_number", "shipment": None}
+
+    try:
+        shipment = await _load_shipment_for_customer_and_tracking(
+            session.customer_id, normalized
+        )
+    except Exception:
+        return {"status": "unavailable", "shipment": None}
+
+    if shipment is None:
+        return {"status": "not_found", "shipment": None}
+    return {"status": "ok", "shipment": shipment}
+
+
 async def _load_latest_shipment_for_customer(
     customer_id: uuid.UUID,
 ) -> dict[str, Any] | None:
@@ -354,6 +419,69 @@ async def _load_latest_shipment_for_customer(
                 LIMIT 1
                 """),
             {"customer_id": customer_id},
+        )
+        row = shipment_result.fetchone()
+        if row is None:
+            return None
+
+        shipment_id = uuid.UUID(str(row[0]))
+        package_result = await db.execute(
+            text("""
+                SELECT description, weight_kg, declared_value
+                FROM packages
+                WHERE shipment_id = :shipment_id
+                ORDER BY description ASC
+                """),
+            {"shipment_id": shipment_id},
+        )
+        packages = [
+            {
+                "description": str(p[0]),
+                "weight_kg": str(p[1]),
+                "declared_value": str(p[2]),
+            }
+            for p in package_result.fetchall()
+        ]
+
+        estimated_delivery = row[6].isoformat() if row[6] else None
+        last_update = row[7].isoformat() if row[7] else None
+
+        return {
+            "id": str(shipment_id),
+            "tracking_number": str(row[1]),
+            "status": str(row[2]),
+            "carrier": str(row[3]),
+            "origin": str(row[4]),
+            "destination": str(row[5]),
+            "estimated_delivery": estimated_delivery,
+            "last_update": last_update,
+            "packages": packages,
+        }
+
+
+async def _load_shipment_for_customer_and_tracking(
+    customer_id: uuid.UUID,
+    tracking_number: str,
+) -> dict[str, Any] | None:
+    """Load one shipment by tracking number for a specific verified customer."""
+    async with AsyncSessionLocal() as db:
+        shipment_result = await db.execute(
+            text("""
+                SELECT
+                    id,
+                    tracking_number,
+                    status,
+                    carrier,
+                    origin,
+                    destination,
+                    estimated_delivery,
+                    last_update
+                FROM shipments
+                WHERE customer_id = :customer_id
+                  AND tracking_number = :tracking_number
+                LIMIT 1
+                """),
+            {"customer_id": customer_id, "tracking_number": tracking_number},
         )
         row = shipment_result.fetchone()
         if row is None:

@@ -142,10 +142,14 @@ export async function verifySmsCode(
     body: JSON.stringify(request),
   });
 
+  const payload = await response.json() as Partial<VerifySmsResponse>;
   if (!response.ok) {
+    if (typeof payload.verified === 'boolean' && typeof payload.state === 'string') {
+      return payload as VerifySmsResponse;
+    }
     throw new Error(`Verification API error: ${response.statusText}`);
   }
 
-  return response.json() as Promise<VerifySmsResponse>;
+  return payload as VerifySmsResponse;
 }
 

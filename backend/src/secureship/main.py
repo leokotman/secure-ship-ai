@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -204,7 +205,7 @@ async def get_session(session_id: str) -> SessionResponse:
 
 
 @app.post("/verify-sms", response_model=VerifySmsResponse)
-async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
+async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse | JSONResponse:
     """Explicit SMS code verification — called directly from the frontend modal.
 
     Delegates to the same `check_verification_code` tool used in the chat flow
@@ -215,20 +216,6 @@ async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
         {"code": request.code},
         request.session_id,
     )
-
-    # Recovery path: when the client is in code-entry mode but no active OTP
-    # exists on the server, proactively send a fresh code for this session.
-    if result.get("status") == "error":
-        current = session_manager.get(request.session_id)
-        if current and current.state == SessionState.CODE_SENT:
-            resend = await execute_tool(
-                "send_verification_code", {}, request.session_id
-            )
-            if resend.get("status") == "code_sent":
-                result = {
-                    "status": "code_resent",
-                    "message": "A new verification code was sent",
-                }
 
     updated = session_manager.get(request.session_id)
     state = updated.state.value if updated else SessionState.ANONYMOUS.value
@@ -260,11 +247,23 @@ async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
     elif status == "error":
         reason = "no_active_code"
 
-    return VerifySmsResponse(
+    payload = VerifySmsResponse(
         verified=(status == "verified"),
         state=state,
         reason=reason,
     )
+
+    status_map: dict[str, int] = {
+        "verified": 200,
+        "incorrect_code": 401,
+        "expired": 410,
+        "max_attempts_exceeded": 429,
+        "error": 409,
+    }
+    response_status = status_map.get(status, 400)
+    if response_status == 200:
+        return payload
+    return JSONResponse(status_code=response_status, content=payload.model_dump())
 
 
 if __name__ == "__main__":
