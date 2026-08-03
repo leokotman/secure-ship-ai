@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { streamChat } from '@/lib/api';
+import { getSession, streamChat } from '@/lib/api';
 import { useSessionStore } from '@/stores/sessionStore';
 import { VerificationFlow } from './VerificationFlow';
 
@@ -20,6 +20,10 @@ const ESCALATION_SCRIPT: Message[] = [
   { id: 'esc-2', role: 'system', content: '🟢 Melany has entered the chat.' },
 ];
 
+const SESSION_STORAGE_KEY = 'secureship_session_id';
+const POST_VERIFY_PROMPT =
+  "I've entered the verification code and I'm now verified. Please continue with my previous shipment request.";
+
 export function ChatWindow() {
   const { sessionId, chatState, firstName, setSessionId, setChatState } =
     useSessionStore();
@@ -29,6 +33,7 @@ export function ChatWindow() {
   const [error, setError] = useState<string | null>(null);
   const [showEscalationScript, setShowEscalationScript] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hydratedSessionRef = useRef<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -38,13 +43,58 @@ export function ChatWindow() {
     scrollToBottom();
   }, [messages]);
 
-  // Restore session_id from localStorage on mount
+  // Migrate away from stale localStorage sessions and recover tab-scoped session id.
   useEffect(() => {
-    const stored = window.localStorage.getItem('secureship_session_id');
-    if (stored && !sessionId) {
-      setSessionId(stored);
+    if (typeof window === 'undefined') return;
+
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    const storedSessionId = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (storedSessionId && !sessionId) {
+      setSessionId(storedSessionId);
     }
   }, [sessionId, setSessionId]);
+
+  // Persist current session id only for this browser tab.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (sessionId) {
+      window.sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    } else {
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  }, [sessionId]);
+
+  // Restore transcript and durable chat state for an existing session.
+  useEffect(() => {
+    if (!sessionId || hydratedSessionRef.current === sessionId) return;
+
+    let cancelled = false;
+    hydratedSessionRef.current = sessionId;
+
+    const hydrateSession = async () => {
+      const sessionData = await getSession(sessionId);
+      if (!sessionData || cancelled) return;
+
+      setChatState(sessionData.state);
+      setMessages(
+        sessionData.messages.map((msg, index) => ({
+          id: `hist-${index}`,
+          role: msg.role,
+          content: msg.content,
+        }))
+      );
+    };
+
+    hydrateSession().catch(() => {
+      // Silent recovery: chat still works without historical hydration.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, setChatState]);
+
 
   // Trigger scripted escalation sequence when state transitions to escalated_to_human
   useEffect(() => {
@@ -70,6 +120,52 @@ export function ChatWindow() {
     }, delay);
   }, [chatState, firstName, showEscalationScript]);
 
+  const streamAssistantResponse = async (message: string) => {
+    const botMessageId = `${Date.now()}-assistant`;
+    let fullResponse = '';
+
+    const result = await streamChat(
+      { message, session_id: sessionId || undefined },
+      (chunk) => {
+        fullResponse += chunk;
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.id === botMessageId) {
+            return prev.map((msg) =>
+              msg.id === botMessageId ? { ...msg, content: fullResponse } : msg
+            );
+          }
+          return [
+            ...prev,
+            { id: botMessageId, role: 'assistant', content: fullResponse },
+          ];
+        });
+      }
+    );
+
+    if (result.sessionId && result.sessionId !== sessionId) {
+      setSessionId(result.sessionId);
+    }
+    if (result.sessionState) {
+      setChatState(result.sessionState);
+    }
+  };
+
+  const handleVerificationSuccess = async () => {
+    setChatState('verified');
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await streamAssistantResponse(POST_VERIFY_PROMPT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -85,40 +181,11 @@ export function ChatWindow() {
     setIsLoading(true);
     setError(null);
 
-    const botMessageId = (Date.now() + 1).toString();
-    let fullResponse = '';
-
     try {
-      const result = await streamChat(
-        { message: input, session_id: sessionId || undefined },
-        (chunk) => {
-          fullResponse += chunk;
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.id === botMessageId) {
-              return prev.map((msg) =>
-                msg.id === botMessageId ? { ...msg, content: fullResponse } : msg
-              );
-            }
-            return [
-              ...prev,
-              { id: botMessageId, role: 'assistant', content: fullResponse },
-            ];
-          });
-        }
-      );
-
-      if (result.sessionId && result.sessionId !== sessionId) {
-        setSessionId(result.sessionId);
-        window.localStorage.setItem('secureship_session_id', result.sessionId);
-      }
-      if (result.sessionState) {
-        setChatState(result.sessionState);
-      }
+      await streamAssistantResponse(input);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
-      setMessages((prev) => prev.filter((msg) => msg.id !== botMessageId));
     } finally {
       setIsLoading(false);
     }
@@ -135,14 +202,14 @@ export function ChatWindow() {
     >
       {/* Verification modal — rendered on demand, not on load */}
       {showModal && (
-        <VerificationFlow onVerified={() => setChatState('verified')} />
+        <VerificationFlow onVerified={handleVerificationSuccess} />
       )}
 
       {/* Header */}
       <div
         className={`border-b p-4 shadow-sm transition-colors duration-700 ${isEscalated
-            ? 'bg-emerald-600 border-emerald-700'
-            : 'bg-white border-gray-200'
+          ? 'bg-emerald-600 border-emerald-700'
+          : 'bg-white border-gray-200'
           }`}
       >
         <h1
@@ -180,10 +247,10 @@ export function ChatWindow() {
           <div
             key={msg.id}
             className={`flex ${msg.role === 'user'
-                ? 'justify-end'
-                : msg.role === 'system'
-                  ? 'justify-center'
-                  : 'justify-start'
+              ? 'justify-end'
+              : msg.role === 'system'
+                ? 'justify-center'
+                : 'justify-start'
               }`}
           >
             {msg.role === 'system' ? (
@@ -193,10 +260,10 @@ export function ChatWindow() {
             ) : (
               <div
                 className={`max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : isEscalated
-                      ? 'bg-emerald-700 text-white border border-emerald-600'
-                      : 'bg-white text-gray-900 border border-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : isEscalated
+                    ? 'bg-emerald-700 text-white border border-emerald-600'
+                    : 'bg-white text-gray-900 border border-gray-200'
                   }`}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">

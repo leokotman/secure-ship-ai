@@ -9,7 +9,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import text
+
 from .identity import verify_identity_db
+from .database import AsyncSessionLocal
 from .session import Session, SessionState, session_manager
 from .sms import CODE_EXPIRY_MINUTES, MAX_CODE_ATTEMPTS, generate_code, send_sms
 
@@ -21,9 +24,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "verify_identity",
             "description": (
-                "Verify a customer's identity by matching their provided details "
-                "against the customer database. Call this once you have collected "
-                "first name, last name, address, and phone number from the conversation."
+                "Verify a customer's identity against the customer database. "
+                "First call: provide first_name, last_name, phone only — no address. "
+                "If that returns could_not_verify, ask for a partial address (street "
+                "number or town) and call again with fallback_address_hint set — this "
+                "is the last resort before telling the customer you cannot verify them."
             ),
             "parameters": {
                 "type": "object",
@@ -36,16 +41,21 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Customer's last name",
                     },
-                    "address": {
-                        "type": "string",
-                        "description": "Customer's full address",
-                    },
                     "phone": {
                         "type": "string",
                         "description": "Phone number in E.164 format (e.g. +14155551234)",
                     },
+                    "fallback_address_hint": {
+                        "type": "string",
+                        "description": (
+                            "ONLY set this on a retry after the first call returned "
+                            "could_not_verify. Partial address (street number or town) "
+                            "provided by the customer as a last resort. Leave empty on "
+                            "the first call."
+                        ),
+                    },
                 },
-                "required": ["first_name", "last_name", "address", "phone"],
+                "required": ["first_name", "last_name", "phone"],
             },
         },
     },
@@ -91,6 +101,22 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": (
                 "Escalate this conversation to a human agent. "
                 "Call this when the customer explicitly asks to speak to a human."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_latest_shipment",
+            "description": (
+                "Get the verified customer's most recent shipment when they do not "
+                "have a tracking number or order ID. Uses server-side session identity "
+                "only."
             ),
             "parameters": {
                 "type": "object",
@@ -175,6 +201,8 @@ async def execute_tool(
         return _check_verification_code(session, str(args.get("code", "")))
     if name == "escalate_to_human":
         return _escalate_to_human(session)
+    if name == "get_latest_shipment":
+        return await _get_latest_shipment(session)
     if name == "update_case_facts":
         return _update_case_facts(session, args)
 
@@ -187,19 +215,20 @@ async def execute_tool(
 async def _verify_identity(session: Session, args: dict[str, Any]) -> dict[str, Any]:
     first_name = str(args.get("first_name", "")).strip()
     last_name = str(args.get("last_name", "")).strip()
-    address = str(args.get("address", "")).strip()
     phone = str(args.get("phone", "")).strip()
+    fallback_hint: str | None = args.get("fallback_address_hint") or None
+    if fallback_hint:
+        fallback_hint = str(fallback_hint).strip() or None
 
     # Store what the user provided for UI context (e.g. greeting by name)
     session.first_name = first_name
     session.last_name = last_name
-    session.address = address
     session.phone = phone
     session.state = SessionState.COLLECTING_IDENTITY
     session_manager.update(session)
 
     customer_id: uuid.UUID | None = await verify_identity_db(
-        first_name, last_name, address, phone
+        first_name, last_name, phone, fallback_hint
     )
 
     if customer_id:
@@ -277,6 +306,83 @@ def _escalate_to_human(session: Session) -> dict[str, Any]:
         "status": "escalated",
         "first_name": session.first_name,
     }
+
+
+async def _get_latest_shipment(session: Session) -> dict[str, Any]:
+    """Return the latest shipment for this verified session's customer only."""
+    if not session.verified or session.customer_id is None:
+        return {"status": "not_verified", "shipment": None}
+
+    try:
+        shipment = await _load_latest_shipment_for_customer(session.customer_id)
+    except Exception:
+        return {"status": "unavailable", "shipment": None}
+
+    if shipment is None:
+        return {"status": "no_shipments", "shipment": None}
+    return {"status": "ok", "shipment": shipment}
+
+
+async def _load_latest_shipment_for_customer(
+    customer_id: uuid.UUID,
+) -> dict[str, Any] | None:
+    """Load latest shipment + packages scoped to one customer ID."""
+    async with AsyncSessionLocal() as db:
+        shipment_result = await db.execute(
+            text("""
+                SELECT
+                    id,
+                    tracking_number,
+                    status,
+                    carrier,
+                    origin,
+                    destination,
+                    estimated_delivery,
+                    last_update
+                FROM shipments
+                WHERE customer_id = :customer_id
+                ORDER BY last_update DESC
+                LIMIT 1
+                """),
+            {"customer_id": customer_id},
+        )
+        row = shipment_result.fetchone()
+        if row is None:
+            return None
+
+        shipment_id = uuid.UUID(str(row[0]))
+        package_result = await db.execute(
+            text("""
+                SELECT description, weight_kg, declared_value
+                FROM packages
+                WHERE shipment_id = :shipment_id
+                ORDER BY description ASC
+                """),
+            {"shipment_id": shipment_id},
+        )
+        packages = [
+            {
+                "description": str(p[0]),
+                "weight_kg": str(p[1]),
+                "declared_value": str(p[2]),
+            }
+            for p in package_result.fetchall()
+        ]
+
+        estimated_delivery = row[6].isoformat() if row[6] else None
+        last_update = row[7].isoformat() if row[7] else None
+
+        return {
+            "id": str(shipment_id),
+            "tracking_number": str(row[1]),
+            "status": str(row[2]),
+            "carrier": str(row[3]),
+            "origin": str(row[4]),
+            "destination": str(row[5]),
+            "estimated_delivery": estimated_delivery,
+            "last_update": last_update,
+            "packages": packages,
+        }
 
 
 def _update_case_facts(session: Session, args: dict[str, Any]) -> dict[str, Any]:

@@ -10,6 +10,7 @@ from secureship.session import Session, SessionManager, SessionState
 from secureship.tools import (
     _check_verification_code,
     _escalate_to_human,
+    _get_latest_shipment,
     _send_verification_code,
     _verify_identity,
     execute_tool,
@@ -52,9 +53,7 @@ async def test_verify_identity_match(anonymous_session: Session) -> None:
 
     with patch(
         "secureship.tools.verify_identity_db", new_callable=AsyncMock
-    ) as mock_db, patch(
-        "secureship.tools.session_manager"
-    ) as mock_mgr:
+    ) as mock_db, patch("secureship.tools.session_manager") as mock_mgr:
         mock_db.return_value = customer_uuid
         mock_mgr.get_or_create.return_value = anonymous_session
         mock_mgr.update.side_effect = lambda s: None
@@ -79,9 +78,7 @@ async def test_verify_identity_no_match(anonymous_session: Session) -> None:
     """Non-matching identity returns neutral failure — no 'customer not found' wording."""
     with patch(
         "secureship.tools.verify_identity_db", new_callable=AsyncMock
-    ) as mock_db, patch(
-        "secureship.tools.session_manager"
-    ) as mock_mgr:
+    ) as mock_db, patch("secureship.tools.session_manager") as mock_mgr:
         mock_db.return_value = None
         mock_mgr.update.side_effect = lambda s: None
 
@@ -138,7 +135,9 @@ def test_check_code_incorrect_increments_attempts(
 def test_check_code_expired(session_with_pending_customer: Session) -> None:
     """Expired code resets state to collecting_identity."""
     session_with_pending_customer.sms_code = "123456"
-    session_with_pending_customer.code_sent_at = datetime.now(timezone.utc) - timedelta(minutes=15)
+    session_with_pending_customer.code_sent_at = datetime.now(timezone.utc) - timedelta(
+        minutes=15
+    )
     session_with_pending_customer.code_attempts = 0
 
     result = _check_verification_code(session_with_pending_customer, "123456")
@@ -147,7 +146,9 @@ def test_check_code_expired(session_with_pending_customer: Session) -> None:
     assert session_with_pending_customer.state == SessionState.COLLECTING_IDENTITY
 
 
-def test_check_code_max_attempts_exceeded(session_with_pending_customer: Session) -> None:
+def test_check_code_max_attempts_exceeded(
+    session_with_pending_customer: Session,
+) -> None:
     """Exceeding attempt limit returns max_attempts_exceeded regardless of code."""
     session_with_pending_customer.sms_code = "123456"
     session_with_pending_customer.code_sent_at = datetime.now(timezone.utc)
@@ -203,6 +204,79 @@ def test_escalate_from_verified_preserves_first_name(verified_session: Session) 
     assert result["status"] == "escalated"
     assert result["first_name"] == "John"
     assert verified_session.state == SessionState.ESCALATED_TO_HUMAN
+
+
+# ── get_latest_shipment tool ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_latest_shipment_requires_verified(
+    anonymous_session: Session,
+) -> None:
+    """Unverified callers get empty result and no data lookup is performed."""
+    with patch(
+        "secureship.tools._load_latest_shipment_for_customer", new_callable=AsyncMock
+    ) as mock_load:
+        result = await _get_latest_shipment(anonymous_session)
+
+    assert result == {"status": "not_verified", "shipment": None}
+    mock_load.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_shipment_returns_latest_for_verified_customer(
+    verified_session: Session,
+) -> None:
+    """Verified callers can retrieve their most recent shipment without IDs."""
+    latest = {
+        "id": "ship-1",
+        "tracking_number": "SS2508000001",
+        "status": "in_transit",
+    }
+    with patch(
+        "secureship.tools._load_latest_shipment_for_customer", new_callable=AsyncMock
+    ) as mock_load:
+        mock_load.return_value = latest
+        result = await _get_latest_shipment(verified_session)
+
+    assert result == {"status": "ok", "shipment": latest}
+    mock_load.assert_awaited_once_with(verified_session.customer_id)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_shipment_handles_lookup_errors(
+    verified_session: Session,
+) -> None:
+    """Lookup failures are converted to safe tool output instead of exceptions."""
+    with patch(
+        "secureship.tools._load_latest_shipment_for_customer", new_callable=AsyncMock
+    ) as mock_load:
+        mock_load.side_effect = RuntimeError("db temporarily unavailable")
+        result = await _get_latest_shipment(verified_session)
+
+    assert result == {"status": "unavailable", "shipment": None}
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_latest_shipment_uses_session_identity_only() -> None:
+    """Dispatcher ignores caller args and always uses session.customer_id."""
+    mgr = SessionManager()
+    sess = mgr.get_or_create("sess-latest")
+    sess.state = SessionState.VERIFIED
+    sess.customer_id = uuid.uuid4()
+
+    with patch("secureship.tools.session_manager", mgr), patch(
+        "secureship.tools._load_latest_shipment_for_customer", new_callable=AsyncMock
+    ) as mock_load:
+        mock_load.return_value = None
+        result = await execute_tool(
+            "get_latest_shipment",
+            {"customer_id": str(uuid.uuid4()), "tracking_number": "OTHER"},
+            "sess-latest",
+        )
+
+    assert result == {"status": "no_shipments", "shipment": None}
+    mock_load.assert_awaited_once_with(sess.customer_id)
 
 
 # ── execute_tool dispatcher ───────────────────────────────────────────────────

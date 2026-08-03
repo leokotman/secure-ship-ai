@@ -33,9 +33,15 @@ export function VerificationFlow({ onVerified }: Props) {
                 onVerified();
             } else {
                 const msg =
-                    result.state === 'collecting_identity'
+                    result.reason === 'expired' || result.state === 'collecting_identity'
                         ? 'Code has expired. Please re-verify your identity in the chat.'
-                        : 'Incorrect code. Please try again.';
+                        : result.reason === 'code_resent'
+                            ? 'No active code was found. A new code was just sent to your phone.'
+                            : result.reason === 'no_active_code'
+                                ? 'No active code is available. Please ask to send a new verification code.'
+                                : result.reason === 'max_attempts_exceeded'
+                                    ? 'Too many incorrect attempts. Please restart verification in the chat.'
+                                    : 'Incorrect code. Please try again.';
                 setError(msg);
                 setCode('');
                 inputRef.current?.focus();

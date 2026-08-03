@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SecureShip", version="0.2.0")
 
+_EPHEMERAL_OTP_STATES: set[str] = {
+    SessionState.CODE_SENT.value,
+    SessionState.AWAITING_CODE.value,
+}
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +56,14 @@ class VerifySmsRequest(BaseModel):
 class VerifySmsResponse(BaseModel):
     verified: bool
     state: str
+    reason: str | None = None
+
+
+def _normalize_rehydrated_state(state: str) -> str:
+    """Collapse transient OTP states to anonymous on page reload."""
+    if state in _EPHEMERAL_OTP_STATES:
+        return SessionState.ANONYMOUS.value
+    return state
 
 
 @app.on_event("startup")
@@ -81,8 +94,12 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     # Restore durable state + case facts from DB (survives server restarts)
     try:
         db_state, db_customer_id, db_case_facts = await load_session_data(session_id)
-        if session.state == SessionState.ANONYMOUS and db_state != "anonymous":
-            session.state = SessionState(db_state)
+        normalized_db_state = _normalize_rehydrated_state(db_state)
+        if (
+            session.state == SessionState.ANONYMOUS
+            and normalized_db_state != SessionState.ANONYMOUS.value
+        ):
+            session.state = SessionState(normalized_db_state)
         if session.customer_id is None and db_customer_id is not None:
             session.customer_id = db_customer_id
         if not session.case_facts and db_case_facts:
@@ -158,6 +175,30 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     return response
 
 
+class SessionResponse(BaseModel):
+    state: str
+    messages: list[dict[str, str]]
+
+
+@app.get("/session/{session_id}", response_model=SessionResponse)
+async def get_session(session_id: str) -> SessionResponse:
+    """Return the persisted state and transcript for a session.
+
+    Called by the frontend on mount to re-hydrate state and message history
+    when the user reloads the page mid-conversation.
+    """
+    db_state, _, _ = await load_session_data(session_id)
+    safe_state = _normalize_rehydrated_state(db_state)
+    transcript = await get_transcript(session_id)
+    # Only return user/assistant turns (filter out any stray entries)
+    messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in transcript
+        if m.get("role") in ("user", "assistant")
+    ]
+    return SessionResponse(state=safe_state, messages=messages)
+
+
 @app.post("/verify-sms", response_model=VerifySmsResponse)
 async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
     """Explicit SMS code verification — called directly from the frontend modal.
@@ -170,6 +211,21 @@ async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
         {"code": request.code},
         request.session_id,
     )
+
+    # Recovery path: when the client is in code-entry mode but no active OTP
+    # exists on the server, proactively send a fresh code for this session.
+    if result.get("status") == "error":
+        current = session_manager.get(request.session_id)
+        if current and current.state == SessionState.CODE_SENT:
+            resend = await execute_tool(
+                "send_verification_code", {}, request.session_id
+            )
+            if resend.get("status") == "code_sent":
+                result = {
+                    "status": "code_resent",
+                    "message": "A new verification code was sent",
+                }
+
     updated = session_manager.get(request.session_id)
     state = updated.state.value if updated else SessionState.ANONYMOUS.value
 
@@ -187,9 +243,23 @@ async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse:
                 request.session_id,
             )
 
+    status = str(result.get("status", ""))
+    reason: str | None = None
+    if status == "expired":
+        reason = "expired"
+    elif status == "incorrect_code":
+        reason = "incorrect_code"
+    elif status == "max_attempts_exceeded":
+        reason = "max_attempts_exceeded"
+    elif status == "code_resent":
+        reason = "code_resent"
+    elif status == "error":
+        reason = "no_active_code"
+
     return VerifySmsResponse(
-        verified=(result.get("status") == "verified"),
+        verified=(status == "verified"),
         state=state,
+        reason=reason,
     )
 
 

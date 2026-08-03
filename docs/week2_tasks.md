@@ -117,7 +117,7 @@ make seed                 # seed customers
 
 Get a real customer to use:
 ```bash
-docker exec -it secureship-db-1 psql -U postgres secureship \
+docker exec -it secure-ship-ai-db-1 psql -U postgres secureship \
   -c "SELECT first_name, last_name, phone_number, address FROM customers LIMIT 3;"
 ```
 Copy one row — you'll use it in the chat.
@@ -135,7 +135,7 @@ Copy one row — you'll use it in the chat.
 4. Reply with your seeded customer's details (can be one message or split across turns):
    `"My name is Liam Smith, I live at 123 Main St Austin TX, phone +15551234567"`
 5. **Expected:** bot calls `verify_identity`, gets `ready_for_code`, immediately calls `send_verification_code`
-6. **Find the code:** in the backend logs (`docker logs secureship-backend-1 --tail 20`) look for:
+6. **Find the code:** in the backend logs (`docker logs secure-ship-ai-backend-1 --tail 20`) look for:
    `[MOCK SMS] To +15551234567: Your SecureShip code is 482917`
 7. A 6-digit modal appears in the UI — enter the code
 8. **Expected:** modal closes, chat state turns `verified`, bot greets by first name
@@ -154,11 +154,11 @@ Copy one row — you'll use it in the chat.
 14. **Expected:** bot acknowledges and calls `update_case_facts` in the background
 15. Confirm in the DB:
     ```bash
-    docker exec -it secureship-db-1 psql -U postgres secureship \
+    docker exec -it secure-ship-ai-db-1 psql -U postgres secureship \
       -c "SELECT session_id, case_facts FROM chat_sessions ORDER BY updated_at DESC LIMIT 1;"
     ```
     You should see `{"tracking_numbers": ["1Z999AA10123456784"], "claimed_amount": "$247.83", ...}`
-16. **Restart the backend:** `docker restart secureship-backend-1`
+16. **Restart the backend:** `docker restart secure-ship-ai-backend-1`
 17. Send any new message in the same browser session
 18. **Expected:** bot still knows the tracking number — it was reloaded from DB into the system prompt
 

@@ -97,6 +97,23 @@ export async function streamChat(
   return { sessionId: returnedSessionId, sessionState };
 }
 
+export interface SessionData {
+  state: ChatState;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+/**
+ * Fetch the persisted state and message history for an existing session.
+ * Called on mount to re-hydrate the UI after a page reload.
+ * Returns null if the session does not exist yet.
+ */
+export async function getSession(sessionId: string): Promise<SessionData | null> {
+  const response = await fetch(`/api/session/${encodeURIComponent(sessionId)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) return null;
+  return response.json() as Promise<SessionData>;
+}
+
 export interface VerifySmsRequest {
   session_id: string;
   code: string;
@@ -105,6 +122,12 @@ export interface VerifySmsRequest {
 export interface VerifySmsResponse {
   verified: boolean;
   state: ChatState;
+  reason?:
+  | 'expired'
+  | 'incorrect_code'
+  | 'max_attempts_exceeded'
+  | 'code_resent'
+  | 'no_active_code';
 }
 
 /**

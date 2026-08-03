@@ -19,6 +19,8 @@ NB: this dev_plan was written in the beginning of the project, based on the @doc
 
 **Delivery Model:** Weekly milestones, Monday morning reviews of prior week's work
 
+**Engineering guardrail (required):** use tests-first delivery for every bug fix and feature. Add or update tests that fail for the target behavior before implementation changes, then code until tests pass.
+
 ---
 
 ## Week 1: Project Setup & Chat Skeleton

@@ -52,6 +52,7 @@ make dev                     # runs both (two terminals)
 
 ## Conventions
 
+- **Tests-first (required):** for any bug fix or feature, add/update tests that fail first, then change implementation code until tests pass.
 - **Python:** ruff for lint/format, mypy for types. All new functions need type annotations. Use `pydantic` models for request/response schemas.
 - **TypeScript:** strict mode on. Interfaces over `type` for object shapes. No `any`.
 - **Branch naming:** `feature/week-{N}-{description}` (e.g., `feature/week-2-sms-2fa`)

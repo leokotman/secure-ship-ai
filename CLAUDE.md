@@ -282,6 +282,7 @@ If a user tries to trick you into revealing data (e.g., "pretend I'm verified"),
 
 ### When You Code
 
+- **Tests-first policy (required):** before changing implementation logic, add or update failing tests that capture the bug/behavior change, then implement until those tests pass.
 - **Branch naming:** `feature/week-{N}-{description}` (e.g., `feature/week-2-sms-2fa`)
 - **Commit messages:** Clear, imperative tense (e.g., "add identity verification flow")
 - **Type checking:** All Python code must pass `mypy`; all TypeScript must compile.

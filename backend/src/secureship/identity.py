@@ -11,25 +11,29 @@ from .database import AsyncSessionLocal
 async def verify_identity_db(
     first_name: str,
     last_name: str,
-    address: str,
     phone: str,
+    address_hint: Optional[str] = None,
 ) -> Optional[uuid.UUID]:
-    """Return customer UUID if all four fields match a Customer row; None otherwise.
+    """Return customer UUID if the provided fields match a Customer row; None otherwise.
 
-    Uses parameterized queries — no string interpolation, no SQL injection risk.
-    Case- and whitespace-insensitive on name/address; exact match on phone (E.164).
+    Primary path: name + phone (phone is unique — definitive identifier).
+    Fallback path: name + phone + partial address (ILIKE containment) when address_hint
+    is supplied after the primary check failed.
+    Uses parameterized queries throughout — no SQL injection risk.
     """
+    params: dict[str, str] = {"fn": first_name, "ln": last_name, "phone": phone}
+    base = (
+        "SELECT id FROM customers "
+        "WHERE lower(trim(first_name)) = lower(trim(:fn)) "
+        "AND lower(trim(last_name)) = lower(trim(:ln)) "
+        "AND phone_number = :phone"
+    )
+    if address_hint:
+        # Partial address as last-resort hint — safely bound, not interpolated
+        params["hint"] = f"%{address_hint.strip()}%"
+        base += " AND lower(address) LIKE lower(:hint)"
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            text(
-                "SELECT id FROM customers "
-                "WHERE lower(trim(first_name)) = lower(trim(:fn)) "
-                "AND lower(trim(last_name)) = lower(trim(:ln)) "
-                "AND lower(trim(address)) = lower(trim(:addr)) "
-                "AND phone_number = :phone"
-            ),
-            {"fn": first_name, "ln": last_name, "addr": address, "phone": phone},
-        )
+        result = await db.execute(text(base), params)
         row = result.fetchone()
         if row is None:
             return None

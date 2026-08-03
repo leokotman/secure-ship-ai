@@ -24,7 +24,6 @@ class Session:
     pending_customer_id: Optional[uuid.UUID] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    address: Optional[str] = None
     phone: Optional[str] = None
     sms_code: Optional[str] = None
     code_sent_at: Optional[datetime] = None
