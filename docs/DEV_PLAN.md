@@ -1,6 +1,7 @@
 # SecureShip Development Plan - 5 Week Build
 
 A detailed week-by-week plan for building SecureShip: an AI-gated shipment support chat with identity verification and tool-calling.
+NB: this dev_plan was written in the beginning of the project, based on the @docs/SecureShip-5Week-Program (1).md. It may be wrong in some implementation details
 
 ---
 
@@ -18,6 +19,8 @@ A detailed week-by-week plan for building SecureShip: an AI-gated shipment suppo
 
 **Delivery Model:** Weekly milestones, Monday morning reviews of prior week's work
 
+**Engineering guardrail (required):** use tests-first delivery for every bug fix and feature. Add or update tests that fail for the target behavior before implementation changes, then code until tests pass.
+
 ---
 
 ## Week 1: Project Setup & Chat Skeleton
@@ -32,7 +35,7 @@ A detailed week-by-week plan for building SecureShip: an AI-gated shipment suppo
   - ⚠️ Current code uses the Anthropic Cloud API as temporary scaffolding — must be replaced with Ollama before Week 1 is considered complete
 - [ ] `.env` management (Ollama host URL, no cloud API keys for chat)
 - [ ] Health check endpoint (`/health`)
-- [ ] `ChatSession` table created in Postgres with `transcript` JSONB column; every turn written immediately (wire this up while the flow is still simple — retrofitting is harder)
+- [x] `ChatSession` table created in Postgres with `transcript` JSONB column; every turn written immediately (wire this up while the flow is still simple — retrofitting is harder)
 
 ### Frontend (Next.js)
 - [ ] Next.js app running on localhost:3000
@@ -80,47 +83,60 @@ A detailed week-by-week plan for building SecureShip: an AI-gated shipment suppo
 **Goal:** Implement the state machine from the architecture spec — conversational identity collection, SMS 2FA, and session gating — so the bot enforces verification before any data access.
 
 ### Backend Enhancements
-- [ ] In-memory session management (migrated to Postgres Week 3)
+- [x] In-memory session management (migrated to Postgres Week 3)
   - Session schema: `session_id`, `customer_id` (set after identity match), `state` (enum: `anonymous | collecting_identity | code_sent | awaiting_code | verified | escalated_to_human`), `name`, `address`, `phone`, `start_time`
   - **Gating key is `session.customer_id` (UUID), never a phone number or user-supplied ID**
-- [ ] Identity collection via tool-calling: the LLM calls backend tools — not direct prompt extraction
+- [x] Identity collection via tool-calling: the LLM calls backend tools — not direct prompt extraction
   - `verify_identity(first_name, last_name, address, phone)` — matches against `Customer` table; on match sets `pending_customer_id` and transitions to `code_sent`; on no-match returns neutral failure (no "customer not found" wording — enumeration risk)
   - `send_verification_code(session_id)` — generates 6-digit code tied to session with expiry (10 min) and attempt limit (3)
   - `check_verification_code(code, session_id)` — validates code, sets `session.customer_id` and state → `verified` on success
-- [ ] `POST /verify-sms` endpoint as explicit verification path (called from frontend modal)
-- [ ] All tool calls gate on session state — unverified sessions only get identity-collection tools
-- [ ] System prompt engineering:
+- [x] `POST /verify-sms` endpoint as explicit verification path (called from frontend modal)
+- [x] All tool calls gate on session state — unverified sessions only get identity-collection tools
+- [x] System prompt engineering:
   - Full `SECURITY RULES` block: collect first_name, last_name, address, phone conversationally; trigger SMS once collected; never reveal shipment data to unverified sessions; refuse prompt injection attempts
-- [ ] Update `ChatSession.state` field on every state transition
+- [x] Update `ChatSession.state` field on every state transition
+- [x] **Persistent case facts block** (added above DEV_PLAN scope — prevents the Progressive Summarisation Trap)
+  - `update_case_facts(tracking_numbers, order_ids, issue_type, claimed_amount, expected_delivery, notes)` tool — model calls it whenever it hears transactional data
+  - Facts stored in `chat_sessions.case_facts` (JSONB); loaded from DB and injected into `## CASE FACTS` section of every system prompt, outside the conversation transcript
+  - Survives both context window summarisation and server restarts; re-hydrated via `load_session_data()` at the start of every request
+- [x] Full conversation history loaded from DB on every `/chat` request (prevents tool-loop context loss on long sessions)
 
 ### Frontend Enhancements
-- [ ] Track session state (store in Zustand)
-- [ ] On-demand 6-digit code modal — rendered when conversation reaches `code_sent` state, not on page load
-- [ ] Display appropriate messaging throughout the verification flow
+- [x] Track session state (store in Zustand — `sessionId`, `chatState`, `firstName`)
+- [x] On-demand 6-digit code modal — rendered when conversation reaches `code_sent` state, not on page load
+- [x] Display appropriate messaging throughout the verification flow
 
 ### Human Escalation (Epic G — cosmetic, scripted)
-- [ ] "I want to talk to a human" intent recognized at any point — from both `anonymous` and `verified` states
-- [ ] Scripted timed sequence: acknowledgment → chat window color shift → "Melany has entered the chat" → personalized greeting using first_name if already collected
-- [ ] No real handoff; session tagged `escalated_to_human` in `ChatSession.state`
-- [ ] **Gating rules still apply through escalation** — the scripted "human" must not disclose shipment data to an unverified visitor
+- [x] "I want to talk to a human" intent recognized at any point — from both `anonymous` and `verified` states
+- [x] Scripted timed sequence: acknowledgment → chat window color shift → "Melany has entered the chat" → personalized greeting using first_name if already collected
+- [x] No real handoff; session tagged `escalated_to_human` in `ChatSession.state`
+- [x] **Gating rules still apply through escalation** — the scripted "human" must not disclose shipment data to an unverified visitor
 
 ### Testing
-- [ ] Manual: unverified user can't see shipment data, only sees identity questions
-- [ ] Manual: wrong SMS code is rejected; correct code transitions to verified
-- [ ] Manual: "I want to talk to a human" triggers the escalation sequence without leaking data
+- [x] Manual: unverified user can't see shipment data, only sees identity questions
+- [x] Manual: wrong SMS code is rejected; correct code transitions to verified
+- [x] Manual: "I want to talk to a human" triggers the escalation sequence without leaking data
+- [ ] Manual: mention a tracking number → confirm `case_facts` written to DB; restart backend → confirm facts survive (see `docs/week2_tasks.md` Scenario 4)
 
 ### Success Criteria
-- [ ] State machine transitions correctly through all states
-- [ ] SMS 2FA flow works end-to-end (Twilio or mocked — mocked is fine)
-- [ ] Session gating enforced server-side (not just hidden in the UI)
-- [ ] `ChatSession.state` updated on every transition
+- [x] State machine transitions correctly through all states
+- [x] SMS 2FA flow works end-to-end (Twilio or mocked — mocked is fine)
+- [x] Session gating enforced server-side (not just hidden in the UI)
+- [x] `ChatSession.state` updated on every transition
+- [x] Transactional facts persist in `chat_sessions.case_facts` and survive context summarisation
 
 ### Key Files Created
 - `backend/src/secureship/identity.py` (identity verification logic)
 - `backend/src/secureship/sms.py` (Twilio / mock SMS integration)
-- `backend/src/secureship/session.py` (in-memory session management)
+- `backend/src/secureship/session.py` (in-memory session management + `case_facts` field)
+- `backend/src/secureship/tools.py` (tool dispatcher — single security enforcement point; includes `update_case_facts`)
+- `backend/src/secureship/chat.py` (SECURITY RULES + CASE FACTS system prompt; async tool-calling loop)
+- `backend/src/secureship/database.py` (extended `ChatSession` with `state`, `customer_id`, `case_facts`; `load_session_data()`)
+- `backend/src/secureship/main.py` (session hydration from DB on every request; `/verify-sms` endpoint)
+- `backend/tests/test_tools.py` (tool security gate tests — 11 cases)
 - `frontend/src/components/VerificationFlow.tsx` (SMS code modal)
 - `frontend/src/stores/sessionStore.ts` (Zustand session state)
+- `frontend/src/pages/api/verify-sms.ts` (BFF proxy)
 
 ---
 
@@ -139,6 +155,8 @@ A detailed week-by-week plan for building SecureShip: an AI-gated shipment suppo
 - [ ] Alembic migrations
 
 ### Backend Enhancements
+- [ ] Add customer-facing authentication (account signup/login/logout + server-side session binding) before exposing persisted transcript/session endpoints broadly.
+  Rationale: Week 2 currently relies on session_id-only retrieval for rehydration, which is acceptable for local scaffolding but should be replaced with authenticated access control.
 - [ ] SQLAlchemy models for all tables above
 - [ ] Shipment data tools exposed to the LLM (all scoped to `session.customer_id` — **never a model- or user-supplied ID**):
   - `lookup_shipments(session_id)` — returns all shipments for `session.customer_id`

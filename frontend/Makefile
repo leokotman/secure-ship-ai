@@ -1,4 +1,4 @@
-.PHONY: help install dev build lint format clean
+.PHONY: help install dev build lint test format clean
 
 help:
 	@echo "SecureShip Frontend Commands"
@@ -7,6 +7,7 @@ help:
 	@echo "build         - Build for production"
 	@echo "start         - Start production server"
 	@echo "lint          - Run linters"
+	@echo "test          - Run tests"
 	@echo "format        - Format code"
 	@echo "clean         - Clean build artifacts"
 
@@ -24,6 +25,9 @@ start:
 
 lint:
 	npm run lint
+
+test:
+	npm run test
 
 format:
 	npm run format

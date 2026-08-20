@@ -6,6 +6,7 @@ applyTo: "frontend/**/*.{ts,tsx}"
 # Frontend Conventions
 
 - TypeScript strict mode is on. No `any`. Use interfaces (not `type`) for object shapes.
+- Tests-first is required: add/update failing tests for UI and state behavior before changing implementation logic.
 - Run `cd frontend && make lint` (ESLint) before committing. `make build` catches type errors.
 
 ## API Calls

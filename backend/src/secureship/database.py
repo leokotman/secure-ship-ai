@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from sqlalchemy import DateTime, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -17,7 +17,7 @@ class Base(DeclarativeBase):
 
 
 class ChatSession(Base):
-    """Persisted transcript per chat session."""
+    """Persisted transcript and identity-gate state per chat session."""
 
     __tablename__ = "chat_sessions"
 
@@ -26,6 +26,16 @@ class ChatSession(Base):
     )
     session_id: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=False
+    )
+    # Identity-gate state — mirrors SessionState enum in session.py
+    state: Mapped[str] = mapped_column(String(50), nullable=False, default="anonymous")
+    # Set once the customer is verified; null until then
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True, default=None
+    )
+    # Transactional facts extracted by the model — never summarized (see chat.py)
+    case_facts: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
     )
     transcript: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list
@@ -106,3 +116,62 @@ async def append_chat_message(
             record.transcript = transcript
 
         await db.commit()
+
+
+async def get_transcript(session_id: str) -> list[dict[str, Any]]:
+    """Return the full conversation history for a session (user + assistant turns)."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.session_id == session_id)
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            return []
+        return list(record.transcript)
+
+
+async def update_session_state(
+    session_id: str,
+    state: str,
+    customer_id: Optional[uuid.UUID] = None,
+    case_facts: Optional[dict[str, Any]] = None,
+) -> None:
+    """Sync state, optional customer_id, and optional case_facts to the ChatSession row."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.session_id == session_id)
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            record = ChatSession(
+                session_id=session_id,
+                state=state,
+                transcript=[],
+            )
+            db.add(record)
+        else:
+            record.state = state
+            if customer_id is not None:
+                record.customer_id = customer_id
+            if case_facts is not None:
+                record.case_facts = case_facts
+        await db.commit()
+
+
+async def load_session_data(
+    session_id: str,
+) -> tuple[str, Optional[uuid.UUID], dict[str, Any]]:
+    """Return (state, customer_id, case_facts) persisted for a session.
+
+    Used on every request to hydrate the in-memory session from the DB so that
+    transactional facts and verification state survive server restarts.
+    Returns defaults (anonymous state, no customer, empty facts) if no record exists.
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.session_id == session_id)
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            return ("anonymous", None, {})
+        return (record.state, record.customer_id, dict(record.case_facts or {}))

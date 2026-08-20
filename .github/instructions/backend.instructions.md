@@ -38,5 +38,6 @@ This is a non-negotiable security boundary. Do not refactor it away.
 ## Testing
 
 - Tests live in `backend/tests/`. Run with `cd backend && make test`.
+- Tests-first is required: add/update failing tests for the behavior before editing backend implementation code.
 - Prefer `pytest` fixtures over setup/teardown classes.
 - Test the security gate explicitly: unverified session → empty result, verified session → real data.

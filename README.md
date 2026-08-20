@@ -26,6 +26,8 @@ make start
 
 This starts Ollama (if not already running) and brings up the full Docker stack. If Ollama was already running you may see a harmless error in the background — ignore it.
 
+Frontend code changes are now picked up automatically by the Docker frontend service (Next.js dev mode + bind mount), so you do not need to rebuild containers for normal UI edits.
+
 Visit **http://localhost:3000**
 
 ### Seed the database (first run only)

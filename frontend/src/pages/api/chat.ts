@@ -67,11 +67,15 @@ export default async function handler(
 
         const contentType = upstreamResponse.headers.get('content-type');
         const sessionId = upstreamResponse.headers.get('x-session-id');
+        const sessionState = upstreamResponse.headers.get('x-session-state');
         res.status(200);
         res.setHeader('Content-Type', contentType || 'text/event-stream; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
         if (sessionId) {
             res.setHeader('x-session-id', sessionId);
+        }
+        if (sessionState) {
+            res.setHeader('x-session-state', sessionState);
         }
 
         try {

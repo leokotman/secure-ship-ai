@@ -1,21 +1,39 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { streamChat } from '@/lib/api';
+import { getSession, streamChat } from '@/lib/api';
+import { useSessionStore } from '@/stores/sessionStore';
+import { VerificationFlow } from './VerificationFlow';
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
+const ESCALATION_SCRIPT: Message[] = [
+  {
+    id: 'esc-1',
+    role: 'system',
+    content: 'Thank you for your patience. Connecting you to a human agent…',
+  },
+  { id: 'esc-2', role: 'system', content: '🟢 Melany has entered the chat.' },
+];
+
+const SESSION_STORAGE_KEY = 'secureship_session_id';
+const POST_VERIFY_PROMPT =
+  "I've entered the verification code and I'm now verified. Please continue with my previous shipment request.";
+
 export function ChatWindow() {
-  const [sessionId, setSessionId] = useState<string>('');
+  const { sessionId, chatState, firstName, setSessionId, setChatState } =
+    useSessionStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showEscalationScript, setShowEscalationScript] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hydratedSessionRef = useRef<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -25,12 +43,128 @@ export function ChatWindow() {
     scrollToBottom();
   }, [messages]);
 
+  // Migrate away from stale localStorage sessions and recover tab-scoped session id.
   useEffect(() => {
-    const storedSessionId = window.localStorage.getItem('secureship_session_id');
-    if (storedSessionId) {
+    if (typeof window === 'undefined') return;
+
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    const storedSessionId = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (storedSessionId && !sessionId) {
       setSessionId(storedSessionId);
     }
-  }, []);
+  }, [sessionId, setSessionId]);
+
+  // Persist current session id only for this browser tab.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (sessionId) {
+      window.sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    } else {
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  }, [sessionId]);
+
+  // Restore transcript and durable chat state for an existing session.
+  useEffect(() => {
+    if (!sessionId || hydratedSessionRef.current === sessionId) return;
+
+    let cancelled = false;
+    hydratedSessionRef.current = sessionId;
+
+    const hydrateSession = async () => {
+      const sessionData = await getSession(sessionId);
+      if (!sessionData || cancelled) return;
+
+      setChatState(sessionData.state);
+      setMessages(
+        sessionData.messages.map((msg, index) => ({
+          id: `hist-${index}`,
+          role: msg.role,
+          content: msg.content,
+        }))
+      );
+    };
+
+    hydrateSession().catch(() => {
+      // Silent recovery: chat still works without historical hydration.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, setChatState]);
+
+
+  // Trigger scripted escalation sequence when state transitions to escalated_to_human
+  useEffect(() => {
+    if (chatState !== 'escalated_to_human' || showEscalationScript) return;
+    setShowEscalationScript(true);
+
+    let delay = 800;
+    ESCALATION_SCRIPT.forEach((msg) => {
+      setTimeout(() => {
+        setMessages((prev) => [...prev, msg]);
+      }, delay);
+      delay += 1200;
+    });
+
+    setTimeout(() => {
+      const greeting = firstName
+        ? `Hi ${firstName}, I'm Melany. Let me just read through our chat here… I'm all caught up. How can I help you today?`
+        : "Hi there, I'm Melany. Let me review your chat… all caught up! How can I help you?";
+      setMessages((prev) => [
+        ...prev,
+        { id: 'esc-3', role: 'system', content: greeting },
+      ]);
+    }, delay);
+  }, [chatState, firstName, showEscalationScript]);
+
+  const streamAssistantResponse = async (message: string) => {
+    const botMessageId = `${Date.now()}-assistant`;
+    let fullResponse = '';
+
+    const result = await streamChat(
+      { message, session_id: sessionId || undefined },
+      (chunk) => {
+        fullResponse += chunk;
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.id === botMessageId) {
+            return prev.map((msg) =>
+              msg.id === botMessageId ? { ...msg, content: fullResponse } : msg
+            );
+          }
+          return [
+            ...prev,
+            { id: botMessageId, role: 'assistant', content: fullResponse },
+          ];
+        });
+      }
+    );
+
+    if (result.sessionId && result.sessionId !== sessionId) {
+      setSessionId(result.sessionId);
+    }
+    if (result.sessionState) {
+      setChatState(result.sessionState);
+    }
+  };
+
+  const handleVerificationSuccess = async () => {
+    setChatState('verified');
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await streamAssistantResponse(POST_VERIFY_PROMPT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,57 +181,50 @@ export function ChatWindow() {
     setIsLoading(true);
     setError(null);
 
-    const botMessageId = (Date.now() + 1).toString();
-    let fullResponse = '';
-
     try {
-      const nextSessionId = await streamChat(
-        { message: input, session_id: sessionId || undefined },
-        (chunk) => {
-          fullResponse += chunk;
-          setMessages((prev) => {
-            const lastMessage = prev[prev.length - 1];
-            if (lastMessage?.id === botMessageId) {
-              return prev.map((msg) =>
-                msg.id === botMessageId
-                  ? { ...msg, content: fullResponse }
-                  : msg
-              );
-            }
-            return [
-              ...prev,
-              {
-                id: botMessageId,
-                role: 'assistant',
-                content: fullResponse,
-              },
-            ];
-          });
-        }
-      );
-
-      if (nextSessionId && nextSessionId !== sessionId) {
-        setSessionId(nextSessionId);
-        window.localStorage.setItem('secureship_session_id', nextSessionId);
-      }
+      await streamAssistantResponse(input);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
-      setMessages((prev) =>
-        prev.filter((msg) => msg.id !== botMessageId)
-      );
     } finally {
       setIsLoading(false);
     }
   };
 
+  const isEscalated = chatState === 'escalated_to_human';
+  const showModal =
+    chatState === 'code_sent' || chatState === 'awaiting_code';
+
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div
+      className={`flex flex-col h-screen transition-colors duration-700 ${isEscalated ? 'bg-emerald-50' : 'bg-gray-100'
+        }`}
+    >
+      {/* Verification modal — rendered on demand, not on load */}
+      {showModal && (
+        <VerificationFlow onVerified={handleVerificationSuccess} />
+      )}
+
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4 shadow-sm">
-        <h1 className="text-2xl font-bold text-gray-900">SecureShip Chat</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Chat with our support bot to check your shipments
+      <div
+        className={`border-b p-4 shadow-sm transition-colors duration-700 ${isEscalated
+          ? 'bg-emerald-600 border-emerald-700'
+          : 'bg-white border-gray-200'
+          }`}
+      >
+        <h1
+          className={`text-2xl font-bold ${isEscalated ? 'text-white' : 'text-gray-900'
+            }`}
+        >
+          {isEscalated ? '🟢 SecureShip — Live Agent' : 'SecureShip Chat'}
+        </h1>
+        <p
+          className={`text-sm mt-1 ${isEscalated ? 'text-emerald-100' : 'text-gray-600'
+            }`}
+        >
+          {isEscalated
+            ? 'You are connected to a human agent'
+            : 'Chat with our support bot to check your shipments'}
         </p>
       </div>
 
@@ -110,7 +237,7 @@ export function ChatWindow() {
                 Start a conversation with SecureShip
               </p>
               <p className="text-gray-400 text-sm mt-2">
-                Ask about your shipments or anything else we can help with
+                Ask about your shipments &mdash; we&apos;ll verify your identity first
               </p>
             </div>
           </div>
@@ -119,17 +246,31 @@ export function ChatWindow() {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'
+            className={`flex ${msg.role === 'user'
+              ? 'justify-end'
+              : msg.role === 'system'
+                ? 'justify-center'
+                : 'justify-start'
               }`}
           >
-            <div
-              className={`max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user'
+            {msg.role === 'system' ? (
+              <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2 rounded-full text-sm">
+                {msg.content}
+              </div>
+            ) : (
+              <div
+                className={`max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-900 border border-gray-200'
-                }`}
-            >
-              <p className="text-sm leading-relaxed">{msg.content}</p>
-            </div>
+                  : isEscalated
+                    ? 'bg-emerald-700 text-white border border-emerald-600'
+                    : 'bg-white text-gray-900 border border-gray-200'
+                  }`}
+              >
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </p>
+              </div>
+            )}
           </div>
         ))}
 
@@ -137,7 +278,7 @@ export function ChatWindow() {
           <div className="flex justify-start">
             <div className="bg-white text-gray-900 border border-gray-200 px-4 py-2 rounded-lg">
               <p className="text-sm text-gray-600 animate-pulse">
-                SecureShip is thinking...
+                {isEscalated ? 'Melany is typing…' : 'SecureShip is thinking…'}
               </p>
             </div>
           </div>
@@ -161,7 +302,9 @@ export function ChatWindow() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
+            placeholder={
+              isEscalated ? 'Message Melany…' : 'Type your message…'
+            }
             disabled={isLoading}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
