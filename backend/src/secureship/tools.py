@@ -5,11 +5,15 @@ All tools operate exclusively on the server-side session — never on
 model- or user-supplied IDs or customer data (Epic F3).
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+logger = logging.getLogger(__name__)
 
 from .database import AsyncSessionLocal
 from .identity import verify_identity_db
@@ -386,12 +390,15 @@ def _escalate_to_human(session: Session) -> dict[str, Any]:
 
 async def _lookup_shipments(session: Session) -> dict[str, Any]:
     """Return all shipments for this verified session's customer only."""
+    logger.debug("lookup_shipments: verified=%s, customer_id=%s", session.verified, session.customer_id)
     if not session.verified or session.customer_id is None:
         return {"status": "not_verified", "shipments": []}
 
     try:
         shipments = await _load_all_shipments_for_customer(session.customer_id)
-    except Exception:
+        logger.debug("lookup_shipments: found %d shipments", len(shipments) if shipments else 0)
+    except Exception as e:
+        logger.exception("lookup_shipments: exception loading shipments")
         return {"status": "unavailable", "shipments": []}
 
     if not shipments:
@@ -476,20 +483,27 @@ async def _load_all_shipments_for_customer(
     customer_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     """Load all shipments + packages for a specific verified customer."""
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Shipment)
-            .where(Shipment.customer_id == customer_id)
-            .order_by(Shipment.last_update.desc())
-        )
-        shipments = result.scalars().all()
-        # Eagerly load packages for each shipment
-        for s in shipments:
-            pkg_result = await db.execute(
-                select(Package).where(Package.shipment_id == s.id)
+    logger.debug("Loading shipments for customer_id=%s", customer_id)
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Shipment)
+                .where(Shipment.customer_id == customer_id)
+                .order_by(Shipment.last_update.desc())
             )
-            s.packages = list(pkg_result.scalars().all())
-        return [_shipment_to_dict(s) for s in shipments]
+            shipments = result.scalars().all()
+            logger.debug("Query returned %d shipments", len(shipments) if shipments else 0)
+            # Convert to dicts while still in active session
+            result_list = []
+            for s in shipments:
+                # Get packages in same session before converting
+                await db.refresh(s, attribute_names=['packages'])
+                result_list.append(_shipment_to_dict(s))
+            logger.debug("Returning %d shipment dicts", len(result_list))
+            return result_list
+    except Exception as e:
+        logger.exception("Error in _load_all_shipments_for_customer: %s", e)
+        raise
 
 
 async def _load_shipment_for_customer_and_id(

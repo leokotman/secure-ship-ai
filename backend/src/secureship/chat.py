@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from .config import settings
-from .session import Session
+from .session import Session, SessionState
 from .tools import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,10 @@ _SYSTEM_PROMPT_TEMPLATE = """\
 You are SecureShip, a professional and empathetic shipment support assistant.
 
 ## SECURITY RULES (NON-NEGOTIABLE)
-- You MUST verify the customer's identity before discussing any shipment, order, or account data.
+**IF STATE IS "verified":** The customer's identity has ALREADY been confirmed.
+  You may discuss shipment data freely. Skip all verification steps.
+
+**IF STATE IS NOT "verified":** You MUST verify the customer's identity before discussing shipments.
 - Identity verification requires ONLY: first name, last name, and phone number.
 - DO NOT ask for an address. Asking for an address upfront is wrong.
 - Collect name and phone conversationally — the customer may provide them in any order.
@@ -54,19 +57,18 @@ State: {state}
 - For the code entry step, tell the customer to enter the code in the box shown,
   or type it in the chat.
 - After verification, acknowledge it and ask how you can help.
-- When a verified customer asks about their shipments without a tracking number,
-    call `lookup_shipments` (no args). It returns all their shipments; summarise
-    the most relevant one(s) in your reply.
-- When a verified customer provides a tracking number, call `get_shipment_status`
-    with that tracking number before answering.
+- **When a verified customer asks about their shipments, ALWAYS call a tool first:**
+    - If they ask without a tracking number, call `lookup_shipments` (no args).
+      It returns all their shipments; summarise the results in your reply.
+    - If they provide a tracking number, call `get_shipment_status` with that number.
+    - Do NOT answer shipment questions without first calling a tool.
+    - Do NOT make up or guess shipment data — only use data from tool results.
 - To fetch full details for a specific shipment, call `get_shipment_details` with
     the `shipment_id` from a prior `lookup_shipments` or `get_shipment_status`
     result — NEVER use a shipment_id typed by the customer directly.
 - If a shipment lookup tool returns `not_found` or `unavailable`, clearly say
     you could not retrieve shipment details right now and ask the customer to
-    confirm the tracking number.
-- Never invent or guess shipment statuses, dates, or addresses. Only report
-    fields that appear in tool output.\
+    confirm the tracking number.\
 """
 
 
@@ -102,6 +104,7 @@ async def stream_chat_response(
         \\x00{"s": "<state>", "sid": "<session_id>"}
     """
     system_prompt = _build_system_prompt(session)
+    logger.debug("stream_chat_response: session_state=%s, customer_id=%s", session.state.value, session.customer_id)
     full_messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         *messages,
@@ -116,10 +119,13 @@ async def stream_chat_response(
 
     # Tool-calling loop — at most _MAX_TOOL_ROUNDS rounds
     for _round in range(_MAX_TOOL_ROUNDS):
+        logger.debug("Tool-calling round %d, message count: %d", _round, len(full_messages))
         tool_calls = await _call_ollama_for_tools(full_messages)
+        logger.debug("Round %d: got %d tool calls", _round, len(tool_calls))
 
         if not tool_calls:
             # No more tools — stream the final text response
+            logger.debug("No more tool calls, streaming final response")
             async for chunk in _stream_ollama(full_messages):
                 yield chunk
             break
@@ -142,9 +148,45 @@ async def stream_chat_response(
             # Capture last successful shipment tool result for the metadata channel
             if name in _SHIPMENT_TOOLS and result.get("status") == "ok":
                 last_shipment_result = {"tool": name, "data": result}
-            full_messages.append(
-                {"role": "tool", "content": json.dumps(result), "name": name}
-            )
+            tool_result_msg = {"role": "tool", "content": json.dumps(result), "name": name}
+            logger.debug("Appending tool result message: %s", tool_result_msg)
+            full_messages.append(tool_result_msg)
+
+            # After verification succeeds, if user asked about shipments, auto-call lookup_shipments
+            if name == "check_verification_code" and result.get("status") == "verified":
+                # Check if the user's original message (or recent messages) mention shipments
+                user_message = next(
+                    (m.get("content", "").lower() for m in reversed(full_messages)
+                     if m.get("role") == "user"),
+                    ""
+                )
+                shipment_keywords = {"shipment", "order", "parcel", "package", "delivery", "track", "status"}
+                if any(kw in user_message for kw in shipment_keywords):
+                    logger.debug(
+                        "Verified user asked about shipments ('%s'); auto-calling lookup_shipments",
+                        user_message[:50]
+                    )
+                    # Reload session from DB to ensure latest state
+                    from .database import load_session_data  # noqa: E402
+                    try:
+                        db_state, db_customer_id, db_case_facts = await load_session_data(session_id)
+                        if db_customer_id:
+                            session.customer_id = db_customer_id
+                        session.state = SessionState(db_state)
+                        from .session import session_manager  # avoid circular import at module level
+                        session_manager.update(session)
+                        logger.debug("Reloaded session from DB: state=%s, customer_id=%s", db_state, db_customer_id)
+                    except Exception as e:
+                        logger.warning("Failed to reload session from DB: %s", e)
+
+                    # Now call lookup_shipments
+                    shipment_result = await execute_tool("lookup_shipments", {}, session_id)
+                    logger.debug("Auto-called lookup_shipments → %s", shipment_result)
+                    if shipment_result.get("status") == "ok":
+                        last_shipment_result = {"tool": "lookup_shipments", "data": shipment_result}
+                    full_messages.append(
+                        {"role": "tool", "content": json.dumps(shipment_result), "name": "lookup_shipments"}
+                    )
     else:
         logger.warning(
             "Max tool rounds (%d) reached for session %s", _MAX_TOOL_ROUNDS, session_id
