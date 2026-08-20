@@ -2,13 +2,17 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { getSession, streamChat } from '@/lib/api';
+import type { ShipmentPayload } from '@/lib/api';
 import { useSessionStore } from '@/stores/sessionStore';
+import { ShipmentDisplay } from './ShipmentDisplay';
 import { VerificationFlow } from './VerificationFlow';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  /** Shipment(s) attached when a shipment tool returned data this turn. */
+  shipments?: ShipmentPayload[];
 }
 
 const ESCALATION_SCRIPT: Message[] = [
@@ -149,6 +153,18 @@ export function ChatWindow() {
     if (result.sessionState) {
       setChatState(result.sessionState);
     }
+    // Attach shipment cards to the bot message
+    if (result.shipment) {
+      const { data } = result.shipment;
+      const shipments: ShipmentPayload[] = data.shipments ?? (data.shipment ? [data.shipment] : []);
+      if (shipments.length > 0) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botMessageId ? { ...msg, shipments } : msg
+          )
+        );
+      }
+    }
   };
 
   const handleVerificationSuccess = async () => {
@@ -269,6 +285,13 @@ export function ChatWindow() {
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">
                   {msg.content}
                 </p>
+                {msg.shipments && msg.shipments.length > 0 && (
+                  <div className="space-y-2">
+                    {msg.shipments.map((s) => (
+                      <ShipmentDisplay key={s.id} shipment={s} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -12,9 +12,29 @@ export interface ChatRequest {
   session_id?: string;
 }
 
+export interface ShipmentPackage {
+  description: string;
+  weight_kg: string;
+  declared_value: string;
+}
+
+export interface ShipmentPayload {
+  id: string;
+  tracking_number: string;
+  status: string;
+  carrier: string;
+  origin: string;
+  destination: string;
+  estimated_delivery: string | null;
+  last_update: string | null;
+  packages: ShipmentPackage[];
+}
+
 export interface StreamChatResult {
   sessionId?: string;
   sessionState?: ChatState;
+  /** Present when a shipment tool returned status=ok this turn. */
+  shipment?: { tool: string; data: { shipments?: ShipmentPayload[]; shipment?: ShipmentPayload } };
 }
 
 /**
@@ -86,9 +106,14 @@ export async function streamChat(
   // Parse state event
   if (stateBuffer.length > 0) {
     try {
-      const meta = JSON.parse(stateBuffer.join('')) as { s?: string; sid?: string };
+      const meta = JSON.parse(stateBuffer.join('')) as {
+        s?: string;
+        sid?: string;
+        shipment?: StreamChatResult['shipment'];
+      };
       if (meta.s) sessionState = meta.s as ChatState;
       if (meta.sid) returnedSessionId = meta.sid;
+      if (meta.shipment) return { sessionId: returnedSessionId, sessionState, shipment: meta.shipment };
     } catch {
       // Malformed metadata — ignore; UI state stays unchanged
     }
@@ -108,7 +133,10 @@ export interface SessionData {
  * Returns null if the session does not exist yet.
  */
 export async function getSession(sessionId: string): Promise<SessionData | null> {
-  const response = await fetch(`/api/session/${encodeURIComponent(sessionId)}`);
+  const params = new URLSearchParams({ requesting_session_id: sessionId });
+  const response = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}?${params.toString()}`
+  );
   if (response.status === 404) return null;
   if (!response.ok) return null;
   return response.json() as Promise<SessionData>;

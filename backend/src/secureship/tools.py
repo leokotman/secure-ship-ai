@@ -9,10 +9,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select
 
 from .database import AsyncSessionLocal
 from .identity import verify_identity_db
+from .models import Package, Shipment
 from .session import Session, SessionState, session_manager
 from .sms import CODE_EXPIRY_MINUTES, MAX_CODE_ATTEMPTS, generate_code, send_sms
 
@@ -118,7 +119,47 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "get_shipment_by_tracking_number",
+            "name": "lookup_shipments",
+            "description": (
+                "Return all shipments for the verified customer. Takes no args — "
+                "uses server-side session identity only. Call this when the customer "
+                "asks about their shipments without a specific tracking number."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_shipment_details",
+            "description": (
+                "Return full details for one shipment by shipment ID. Only call this "
+                "with a shipment_id obtained from a prior tool result — never one "
+                "typed by the customer directly."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "shipment_id": {
+                        "type": "string",
+                        "description": (
+                            "Shipment UUID from a prior lookup_shipments "
+                            "or get_shipment_status result"
+                        ),
+                    }
+                },
+                "required": ["shipment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_shipment_status",
             "description": (
                 "Get a verified customer's shipment by tracking number. "
                 "Uses server-side session identity and ignores any customer IDs."
@@ -132,22 +173,6 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     }
                 },
                 "required": ["tracking_number"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_latest_shipment",
-            "description": (
-                "Get the verified customer's most recent shipment when they do not "
-                "have a tracking number or order ID. Uses server-side session identity "
-                "only."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
             },
         },
     },
@@ -227,12 +252,12 @@ async def execute_tool(
         return _check_verification_code(session, str(args.get("code", "")))
     if name == "escalate_to_human":
         return _escalate_to_human(session)
-    if name == "get_shipment_by_tracking_number":
-        return await _get_shipment_by_tracking_number(
-            session, str(args.get("tracking_number", ""))
-        )
-    if name == "get_latest_shipment":
-        return await _get_latest_shipment(session)
+    if name == "lookup_shipments":
+        return await _lookup_shipments(session)
+    if name == "get_shipment_details":
+        return await _get_shipment_details(session, str(args.get("shipment_id", "")))
+    if name == "get_shipment_status":
+        return await _get_shipment_status(session, str(args.get("tracking_number", "")))
     if name == "update_case_facts":
         return _update_case_facts(session, args)
 
@@ -359,22 +384,44 @@ def _escalate_to_human(session: Session) -> dict[str, Any]:
     }
 
 
-async def _get_latest_shipment(session: Session) -> dict[str, Any]:
-    """Return the latest shipment for this verified session's customer only."""
+async def _lookup_shipments(session: Session) -> dict[str, Any]:
+    """Return all shipments for this verified session's customer only."""
+    if not session.verified or session.customer_id is None:
+        return {"status": "not_verified", "shipments": []}
+
+    try:
+        shipments = await _load_all_shipments_for_customer(session.customer_id)
+    except Exception:
+        return {"status": "unavailable", "shipments": []}
+
+    if not shipments:
+        return {"status": "no_shipments", "shipments": []}
+    return {"status": "ok", "shipments": shipments}
+
+
+async def _get_shipment_details(session: Session, shipment_id: str) -> dict[str, Any]:
+    """Return full details for one shipment, ownership-checked against session."""
     if not session.verified or session.customer_id is None:
         return {"status": "not_verified", "shipment": None}
 
     try:
-        shipment = await _load_latest_shipment_for_customer(session.customer_id)
+        parsed_id = uuid.UUID(shipment_id.strip())
+    except ValueError:
+        return {"status": "not_found", "shipment": None}
+
+    try:
+        shipment = await _load_shipment_for_customer_and_id(
+            session.customer_id, parsed_id
+        )
     except Exception:
         return {"status": "unavailable", "shipment": None}
 
     if shipment is None:
-        return {"status": "no_shipments", "shipment": None}
+        return {"status": "not_found", "shipment": None}
     return {"status": "ok", "shipment": shipment}
 
 
-async def _get_shipment_by_tracking_number(
+async def _get_shipment_status(
     session: Session, tracking_number: str
 ) -> dict[str, Any]:
     """Return one verified customer's shipment matched by tracking number."""
@@ -397,129 +444,96 @@ async def _get_shipment_by_tracking_number(
     return {"status": "ok", "shipment": shipment}
 
 
-async def _load_latest_shipment_for_customer(
-    customer_id: uuid.UUID,
-) -> dict[str, Any] | None:
-    """Load latest shipment + packages scoped to one customer ID."""
-    async with AsyncSessionLocal() as db:
-        shipment_result = await db.execute(
-            text("""
-                SELECT
-                    id,
-                    tracking_number,
-                    status,
-                    carrier,
-                    origin,
-                    destination,
-                    estimated_delivery,
-                    last_update
-                FROM shipments
-                WHERE customer_id = :customer_id
-                ORDER BY last_update DESC
-                LIMIT 1
-                """),
-            {"customer_id": customer_id},
-        )
-        row = shipment_result.fetchone()
-        if row is None:
-            return None
-
-        shipment_id = uuid.UUID(str(row[0]))
-        package_result = await db.execute(
-            text("""
-                SELECT description, weight_kg, declared_value
-                FROM packages
-                WHERE shipment_id = :shipment_id
-                ORDER BY description ASC
-                """),
-            {"shipment_id": shipment_id},
-        )
-        packages = [
+def _shipment_to_dict(shipment: Shipment) -> dict[str, Any]:
+    """Serialize a Shipment ORM instance to a JSON-safe dict."""
+    return {
+        "id": str(shipment.id),
+        "tracking_number": shipment.tracking_number,
+        "status": shipment.status,
+        "carrier": shipment.carrier,
+        "origin": shipment.origin,
+        "destination": shipment.destination,
+        "estimated_delivery": (
+            shipment.estimated_delivery.isoformat()
+            if shipment.estimated_delivery
+            else None
+        ),
+        "last_update": (
+            shipment.last_update.isoformat() if shipment.last_update else None
+        ),
+        "packages": [
             {
-                "description": str(p[0]),
-                "weight_kg": str(p[1]),
-                "declared_value": str(p[2]),
+                "description": p.description,
+                "weight_kg": str(p.weight_kg),
+                "declared_value": str(p.declared_value),
             }
-            for p in package_result.fetchall()
-        ]
+            for p in sorted(shipment.packages, key=lambda p: p.description)
+        ],
+    }
 
-        estimated_delivery = row[6].isoformat() if row[6] else None
-        last_update = row[7].isoformat() if row[7] else None
 
-        return {
-            "id": str(shipment_id),
-            "tracking_number": str(row[1]),
-            "status": str(row[2]),
-            "carrier": str(row[3]),
-            "origin": str(row[4]),
-            "destination": str(row[5]),
-            "estimated_delivery": estimated_delivery,
-            "last_update": last_update,
-            "packages": packages,
-        }
+async def _load_all_shipments_for_customer(
+    customer_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """Load all shipments + packages for a specific verified customer."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Shipment)
+            .where(Shipment.customer_id == customer_id)
+            .order_by(Shipment.last_update.desc())
+        )
+        shipments = result.scalars().all()
+        # Eagerly load packages for each shipment
+        for s in shipments:
+            pkg_result = await db.execute(
+                select(Package).where(Package.shipment_id == s.id)
+            )
+            s.packages = list(pkg_result.scalars().all())
+        return [_shipment_to_dict(s) for s in shipments]
+
+
+async def _load_shipment_for_customer_and_id(
+    customer_id: uuid.UUID,
+    shipment_id: uuid.UUID,
+) -> dict[str, Any] | None:
+    """Load one shipment by ID, ownership-checked against customer_id."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Shipment).where(
+                Shipment.id == shipment_id,
+                Shipment.customer_id == customer_id,
+            )
+        )
+        shipment = result.scalar_one_or_none()
+        if shipment is None:
+            return None
+        pkg_result = await db.execute(
+            select(Package).where(Package.shipment_id == shipment.id)
+        )
+        shipment.packages = list(pkg_result.scalars().all())
+        return _shipment_to_dict(shipment)
 
 
 async def _load_shipment_for_customer_and_tracking(
     customer_id: uuid.UUID,
     tracking_number: str,
 ) -> dict[str, Any] | None:
-    """Load one shipment by tracking number for a specific verified customer."""
+    """Load one shipment by tracking number, ownership-checked against customer_id."""
     async with AsyncSessionLocal() as db:
-        shipment_result = await db.execute(
-            text("""
-                SELECT
-                    id,
-                    tracking_number,
-                    status,
-                    carrier,
-                    origin,
-                    destination,
-                    estimated_delivery,
-                    last_update
-                FROM shipments
-                WHERE customer_id = :customer_id
-                  AND tracking_number = :tracking_number
-                LIMIT 1
-                """),
-            {"customer_id": customer_id, "tracking_number": tracking_number},
+        result = await db.execute(
+            select(Shipment).where(
+                Shipment.customer_id == customer_id,
+                Shipment.tracking_number == tracking_number,
+            )
         )
-        row = shipment_result.fetchone()
-        if row is None:
+        shipment = result.scalar_one_or_none()
+        if shipment is None:
             return None
-
-        shipment_id = uuid.UUID(str(row[0]))
-        package_result = await db.execute(
-            text("""
-                SELECT description, weight_kg, declared_value
-                FROM packages
-                WHERE shipment_id = :shipment_id
-                ORDER BY description ASC
-                """),
-            {"shipment_id": shipment_id},
+        pkg_result = await db.execute(
+            select(Package).where(Package.shipment_id == shipment.id)
         )
-        packages = [
-            {
-                "description": str(p[0]),
-                "weight_kg": str(p[1]),
-                "declared_value": str(p[2]),
-            }
-            for p in package_result.fetchall()
-        ]
-
-        estimated_delivery = row[6].isoformat() if row[6] else None
-        last_update = row[7].isoformat() if row[7] else None
-
-        return {
-            "id": str(shipment_id),
-            "tracking_number": str(row[1]),
-            "status": str(row[2]),
-            "carrier": str(row[3]),
-            "origin": str(row[4]),
-            "destination": str(row[5]),
-            "estimated_delivery": estimated_delivery,
-            "last_update": last_update,
-            "packages": packages,
-        }
+        shipment.packages = list(pkg_result.scalars().all())
+        return _shipment_to_dict(shipment)
 
 
 def _update_case_facts(session: Session, args: dict[str, Any]) -> dict[str, Any]:

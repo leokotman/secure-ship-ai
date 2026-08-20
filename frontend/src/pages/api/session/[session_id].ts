@@ -24,7 +24,16 @@ export default async function handler(
     }
 
     try {
-        const upstream = await fetch(`${BACKEND_BASE_URL}/session/${encodeURIComponent(session_id)}`);
+        const { session_id: _sid, ...rest } = req.query;
+        const qs = new URLSearchParams(
+            Object.fromEntries(
+                Object.entries(rest).flatMap(([k, v]) =>
+                    Array.isArray(v) ? v.map((val) => [k, val]) : [[k, v as string]]
+                )
+            )
+        ).toString();
+        const upstreamUrl = `${BACKEND_BASE_URL}/session/${encodeURIComponent(session_id)}${qs ? `?${qs}` : ''}`;
+        const upstream = await fetch(upstreamUrl);
 
         if (!upstream.ok) {
             res.status(upstream.status).json({ error: GENERIC_ERROR });

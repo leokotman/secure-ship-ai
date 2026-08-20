@@ -54,15 +54,19 @@ State: {state}
 - For the code entry step, tell the customer to enter the code in the box shown,
   or type it in the chat.
 - After verification, acknowledge it and ask how you can help.
-- When a verified customer asks about shipment status and provides a tracking
-    number, you MUST call `get_shipment_by_tracking_number` before answering.
+- When a verified customer asks about their shipments without a tracking number,
+    call `lookup_shipments` (no args). It returns all their shipments; summarise
+    the most relevant one(s) in your reply.
+- When a verified customer provides a tracking number, call `get_shipment_status`
+    with that tracking number before answering.
+- To fetch full details for a specific shipment, call `get_shipment_details` with
+    the `shipment_id` from a prior `lookup_shipments` or `get_shipment_status`
+    result — NEVER use a shipment_id typed by the customer directly.
 - If a shipment lookup tool returns `not_found` or `unavailable`, clearly say
     you could not retrieve shipment details right now and ask the customer to
     confirm the tracking number.
 - Never invent or guess shipment statuses, dates, or addresses. Only report
-    fields that appear in tool output.
-- If a verified customer asks for their latest/recent shipment and does not know
-    an order ID or tracking number, call `get_latest_shipment` and share that result.\
+    fields that appear in tool output.\
 """
 
 
@@ -103,6 +107,13 @@ async def stream_chat_response(
         *messages,
     ]
 
+    _SHIPMENT_TOOLS = {
+        "lookup_shipments",
+        "get_shipment_details",
+        "get_shipment_status",
+    }
+    last_shipment_result: dict[str, Any] | None = None
+
     # Tool-calling loop — at most _MAX_TOOL_ROUNDS rounds
     for _round in range(_MAX_TOOL_ROUNDS):
         tool_calls = await _call_ollama_for_tools(full_messages)
@@ -128,6 +139,9 @@ async def stream_chat_response(
                     args = {}
             result = await execute_tool(name, args, session_id)
             logger.debug("Tool %s → %s", name, result)
+            # Capture last successful shipment tool result for the metadata channel
+            if name in _SHIPMENT_TOOLS and result.get("status") == "ok":
+                last_shipment_result = {"tool": name, "data": result}
             full_messages.append(
                 {"role": "tool", "content": json.dumps(result), "name": name}
             )
@@ -141,7 +155,10 @@ async def stream_chat_response(
     from .session import session_manager  # avoid circular import at module level
 
     updated = session_manager.get(session_id) or session
-    state_event = json.dumps({"s": updated.state.value, "sid": session_id})
+    meta: dict[str, Any] = {"s": updated.state.value, "sid": session_id}
+    if last_shipment_result is not None:
+        meta["shipment"] = last_shipment_result
+    state_event = json.dumps(meta)
     yield f"\x00{state_event}"
 
 
@@ -166,7 +183,16 @@ async def _call_ollama_for_tools(
     except httpx.HTTPError as exc:
         logger.error("Ollama tool-detection call failed: %s", exc)
         return []
-    return data.get("message", {}).get("tool_calls") or []
+
+    # Debug logging: log full response and what we extract
+    logger.debug("Ollama tool-call response keys: %s", list(data.keys()))
+    if "message" in data:
+        logger.debug("Message keys: %s", list(data["message"].keys()))
+        logger.debug("Full message: %s", data["message"])
+
+    tool_calls = data.get("message", {}).get("tool_calls") or []
+    logger.debug("Extracted tool_calls: %s", tool_calls)
+    return tool_calls
 
 
 async def _stream_ollama(

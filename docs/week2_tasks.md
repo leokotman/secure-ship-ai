@@ -1,6 +1,6 @@
 # Week 2 Tasks
 
-## Status: In Progress
+## Status: Complete (tested)
 
 Week 2 implements the identity-gating state machine from DEV_PLAN Section 6.2: conversational identity collection, SMS 2FA, and session state that gates all subsequent tool calls. No shipment data is accessible this week — that's Week 3.
 
