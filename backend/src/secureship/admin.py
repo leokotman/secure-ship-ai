@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -41,18 +41,19 @@ ShipmentStatus = Literal[
 class PackageResponse(BaseModel):
     """Package detail response."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     shipment_id: str
     description: str
     weight_kg: str
     declared_value: str
 
-    class Config:
-        from_attributes = True
-
 
 class ShipmentResponse(BaseModel):
     """Shipment detail response."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     customer_id: str
@@ -66,9 +67,6 @@ class ShipmentResponse(BaseModel):
     deleted_at: str | None
     packages: list[PackageResponse] = []
 
-    class Config:
-        from_attributes = True
-
 
 class ShipmentListResponse(BaseModel):
     """Paginated shipment list response."""
@@ -81,6 +79,20 @@ class ShipmentListResponse(BaseModel):
 
 class CreateShipmentRequest(BaseModel):
     """Request to create a new shipment."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "customer_id": "615bbe4a-2716-4322-8006-b5e2d759689f",
+                "tracking_number": "TEST-SWAGGER-001",
+                "status": "label_created",
+                "carrier": "FedEx",
+                "origin": "New York, NY",
+                "destination": "Los Angeles, CA",
+                "estimated_delivery": "2026-08-30T14:00:00Z",
+            }
+        }
+    )
 
     customer_id: str = Field(..., description="Customer UUID (must exist in database)")
     tracking_number: str = Field(
@@ -106,19 +118,6 @@ class CreateShipmentRequest(BaseModel):
         description="Estimated delivery datetime (ISO 8601 format, e.g., 2026-08-25T12:00:00Z)",
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "customer_id": "615bbe4a-2716-4322-8006-b5e2d759689f",
-                "tracking_number": "TEST-SWAGGER-001",
-                "status": "label_created",
-                "carrier": "FedEx",
-                "origin": "New York, NY",
-                "destination": "Los Angeles, CA",
-                "estimated_delivery": "2026-08-30T14:00:00Z",
-            }
-        }
-
 
 class UpdateShipmentRequest(BaseModel):
     """Request to update an existing shipment.
@@ -126,6 +125,20 @@ class UpdateShipmentRequest(BaseModel):
     All fields are optional - only send the fields you want to update.
     Example: To update only status, send: {"status": "in_transit"}
     """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {"status": "in_transit"},
+                {"status": "delivered", "estimated_delivery": "2026-08-25T14:00:00Z"},
+                {
+                    "carrier": "FedEx",
+                    "origin": "New York, NY",
+                    "destination": "Los Angeles, CA",
+                },
+            ]
+        }
+    )
 
     status: ShipmentStatus | None = Field(
         default=None, description="Update shipment status"
@@ -146,19 +159,6 @@ class UpdateShipmentRequest(BaseModel):
         default=None,
         description="Update estimated delivery (ISO 8601 format, e.g., 2026-08-25T12:00:00Z)",
     )
-
-    class Config:
-        json_schema_extra = {
-            "examples": [
-                {"status": "in_transit"},
-                {"status": "delivered", "estimated_delivery": "2026-08-25T14:00:00Z"},
-                {
-                    "carrier": "FedEx",
-                    "origin": "New York, NY",
-                    "destination": "Los Angeles, CA",
-                },
-            ]
-        }
 
 
 class CreatePackageRequest(BaseModel):

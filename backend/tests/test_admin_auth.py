@@ -1,11 +1,12 @@
 """Tests for Auth0 JWT verification middleware."""
 
 import json
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
+import jwt.algorithms
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -59,7 +60,7 @@ def jwk_from_public_key(rsa_key_pair: tuple[bytes, bytes]) -> dict[str, Any]:
 def valid_token(rsa_key_pair: tuple[bytes, bytes]) -> str:
     """Create a valid JWT token signed with the test private key."""
     private_pem, _ = rsa_key_pair
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     payload = {
         "sub": "auth0|user123",
         "aud": settings.auth0_audience,
@@ -80,7 +81,7 @@ def valid_token(rsa_key_pair: tuple[bytes, bytes]) -> str:
 def expired_token(rsa_key_pair: tuple[bytes, bytes]) -> str:
     """Create an expired JWT token."""
     private_pem, _ = rsa_key_pair
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     payload = {
         "sub": "auth0|user123",
         "aud": settings.auth0_audience,
@@ -101,7 +102,7 @@ def expired_token(rsa_key_pair: tuple[bytes, bytes]) -> str:
 def token_wrong_audience(rsa_key_pair: tuple[bytes, bytes]) -> str:
     """Create a token with wrong audience."""
     private_pem, _ = rsa_key_pair
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     payload = {
         "sub": "auth0|user123",
         "aud": "wrong_audience",
@@ -122,7 +123,7 @@ def token_wrong_audience(rsa_key_pair: tuple[bytes, bytes]) -> str:
 def token_wrong_issuer(rsa_key_pair: tuple[bytes, bytes]) -> str:
     """Create a token with wrong issuer."""
     private_pem, _ = rsa_key_pair
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     payload = {
         "sub": "auth0|user123",
         "aud": settings.auth0_audience,
@@ -172,7 +173,7 @@ class TestJWKSCache:
         """Cache should detect expiration based on TTL."""
         cache = JWKSCache(ttl_seconds=0)  # Immediate expiry
         cache.jwks_data = {"keys": []}
-        cache.cached_at = datetime.utcnow()
+        cache.cached_at = datetime.now(UTC)
 
         assert cache.is_expired()
 
@@ -183,7 +184,7 @@ class TestJWKSCache:
         """If fetch fails, cache should return stale data if available."""
         cache = JWKSCache(ttl_seconds=0)  # Expired
         cache.jwks_data = {"keys": [jwk_from_public_key]}
-        cache.cached_at = datetime.utcnow() - timedelta(hours=1)
+        cache.cached_at = datetime.now(UTC) - timedelta(hours=1)
 
         mock_async_client = AsyncMock()
         mock_async_client.get.side_effect = Exception("Network error")
@@ -307,7 +308,7 @@ class TestVerifyAdminToken:
     ):
         """Token without kid in header should raise 401."""
         private_pem, _ = rsa_key_pair
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         payload = {
             "sub": "auth0|user123",
             "aud": settings.auth0_audience,

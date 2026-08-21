@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -29,7 +29,7 @@ class JWKSCache:
         """Check if cache has expired."""
         if self.cached_at is None:
             return True
-        return datetime.utcnow() > self.cached_at + timedelta(seconds=self.ttl_seconds)
+        return datetime.now(UTC) > self.cached_at + timedelta(seconds=self.ttl_seconds)
 
     async def get_jwks(self) -> dict[str, Any]:
         """Fetch and cache Auth0 JWKS."""
@@ -42,7 +42,7 @@ class JWKSCache:
             response = await client.get(jwks_url, timeout=10.0)
             response.raise_for_status()
             self.jwks_data = response.json()
-            self.cached_at = datetime.utcnow()
+            self.cached_at = datetime.now(UTC)
             logger.debug("Fetched JWKS from Auth0")
             await client.aclose()
             return self.jwks_data
