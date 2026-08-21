@@ -83,6 +83,9 @@ async def verify_admin_token(
     - Issuer (iss)
     """
     token = credentials.credentials
+    logger.info(f"🔍 Verifying token (first 30 chars): {token[:30]}...")
+    logger.info(f"📋 Expected audience: {settings.auth0_audience}")
+    logger.info(f"📋 Expected issuer: https://{settings.auth0_domain}/")
 
     try:
         # Get JWKS to verify signature

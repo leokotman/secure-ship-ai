@@ -488,13 +488,19 @@ def _shipment_to_dict(shipment: Shipment) -> dict[str, Any]:
 async def _load_all_shipments_for_customer(
     customer_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
-    """Load all shipments + packages for a specific verified customer."""
+    """Load all shipments + packages for a specific verified customer.
+
+    Excludes soft-deleted shipments (deleted_at IS NOT NULL).
+    """
     logger.debug("Loading shipments for customer_id=%s", customer_id)
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(Shipment)
-                .where(Shipment.customer_id == customer_id)
+                .where(
+                    Shipment.customer_id == customer_id,
+                    Shipment.deleted_at.is_(None),  # Exclude soft-deleted
+                )
                 .order_by(Shipment.last_update.desc())
             )
             shipments = result.scalars().all()
@@ -518,12 +524,16 @@ async def _load_shipment_for_customer_and_id(
     customer_id: uuid.UUID,
     shipment_id: uuid.UUID,
 ) -> dict[str, Any] | None:
-    """Load one shipment by ID, ownership-checked against customer_id."""
+    """Load one shipment by ID, ownership-checked against customer_id.
+
+    Excludes soft-deleted shipments.
+    """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Shipment).where(
                 Shipment.id == shipment_id,
                 Shipment.customer_id == customer_id,
+                Shipment.deleted_at.is_(None),  # Exclude soft-deleted
             )
         )
         shipment = result.scalar_one_or_none()
@@ -540,12 +550,16 @@ async def _load_shipment_for_customer_and_tracking(
     customer_id: uuid.UUID,
     tracking_number: str,
 ) -> dict[str, Any] | None:
-    """Load one shipment by tracking number, ownership-checked against customer_id."""
+    """Load one shipment by tracking number, ownership-checked against customer_id.
+
+    Excludes soft-deleted shipments.
+    """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Shipment).where(
                 Shipment.customer_id == customer_id,
                 Shipment.tracking_number == tracking_number,
+                Shipment.deleted_at.is_(None),  # Exclude soft-deleted
             )
         )
         shipment = result.scalar_one_or_none()
