@@ -83,13 +83,27 @@ class CreateShipmentRequest(BaseModel):
     """Request to create a new shipment."""
 
     customer_id: str = Field(..., description="Customer UUID (must exist in database)")
-    tracking_number: str = Field(..., min_length=1, max_length=100, description="Unique tracking number")
-    status: ShipmentStatus = Field(default="label_created", description="Initial shipment status")
-    carrier: str = Field(..., min_length=1, max_length=100, description="Carrier name (e.g., FedEx, UPS, USPS)")
-    origin: str = Field(..., min_length=1, max_length=255, description="Origin location")
-    destination: str = Field(..., min_length=1, max_length=255, description="Destination location")
+    tracking_number: str = Field(
+        ..., min_length=1, max_length=100, description="Unique tracking number"
+    )
+    status: ShipmentStatus = Field(
+        default="label_created", description="Initial shipment status"
+    )
+    carrier: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Carrier name (e.g., FedEx, UPS, USPS)",
+    )
+    origin: str = Field(
+        ..., min_length=1, max_length=255, description="Origin location"
+    )
+    destination: str = Field(
+        ..., min_length=1, max_length=255, description="Destination location"
+    )
     estimated_delivery: str | None = Field(
-        default=None, description="Estimated delivery datetime (ISO 8601 format, e.g., 2026-08-25T12:00:00Z)"
+        default=None,
+        description="Estimated delivery datetime (ISO 8601 format, e.g., 2026-08-25T12:00:00Z)",
     )
 
     class Config:
@@ -101,7 +115,7 @@ class CreateShipmentRequest(BaseModel):
                 "carrier": "FedEx",
                 "origin": "New York, NY",
                 "destination": "Los Angeles, CA",
-                "estimated_delivery": "2026-08-30T14:00:00Z"
+                "estimated_delivery": "2026-08-30T14:00:00Z",
             }
         }
 
@@ -113,12 +127,24 @@ class UpdateShipmentRequest(BaseModel):
     Example: To update only status, send: {"status": "in_transit"}
     """
 
-    status: ShipmentStatus | None = Field(default=None, description="Update shipment status")
-    carrier: str | None = Field(default=None, min_length=1, max_length=100, description="Update carrier name")
-    origin: str | None = Field(default=None, min_length=1, max_length=255, description="Update origin location")
-    destination: str | None = Field(default=None, min_length=1, max_length=255, description="Update destination location")
+    status: ShipmentStatus | None = Field(
+        default=None, description="Update shipment status"
+    )
+    carrier: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Update carrier name"
+    )
+    origin: str | None = Field(
+        default=None, min_length=1, max_length=255, description="Update origin location"
+    )
+    destination: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Update destination location",
+    )
     estimated_delivery: str | None = Field(
-        default=None, description="Update estimated delivery (ISO 8601 format, e.g., 2026-08-25T12:00:00Z)"
+        default=None,
+        description="Update estimated delivery (ISO 8601 format, e.g., 2026-08-25T12:00:00Z)",
     )
 
     class Config:
@@ -126,7 +152,11 @@ class UpdateShipmentRequest(BaseModel):
             "examples": [
                 {"status": "in_transit"},
                 {"status": "delivered", "estimated_delivery": "2026-08-25T14:00:00Z"},
-                {"carrier": "FedEx", "origin": "New York, NY", "destination": "Los Angeles, CA"}
+                {
+                    "carrier": "FedEx",
+                    "origin": "New York, NY",
+                    "destination": "Los Angeles, CA",
+                },
             ]
         }
 

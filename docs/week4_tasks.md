@@ -12,13 +12,13 @@ Neither `auth.py` nor `admin.py` exist yet in `backend/src/secureship/`; both ar
 
 ### Backend (Python/FastAPI)
 
-- [ ] **Auth0 JWT Verification Middleware** — `backend/src/secureship/auth.py`
+- [x] **Auth0 JWT Verification Middleware** — `backend/src/secureship/auth.py`
   - Fetch and cache Auth0 JWKS (`https://{AUTH0_DOMAIN}/.well-known/jwks.json`)
   - Verify JWT signature, `aud` (against `AUTH0_AUDIENCE`), `iss`, and expiry on every admin request
   - FastAPI dependency (e.g. `require_admin()`) applied to all `/admin/*` routes — a completely separate enforcement point from the `session.customer_id` gate used by chat tools
   - Add `AUTH0_AUDIENCE` to `.env.example`; add JWT/JWKS library (e.g. `python-jose[cryptography]` or `pyjwt[crypto]`) to `pyproject.toml`
 
-- [ ] **Admin API Endpoints** — `backend/src/secureship/admin.py`, all behind `require_admin()`
+- [x] **Admin API Endpoints** — `backend/src/secureship/admin.py`, all behind `require_admin()`
   - `GET /admin/shipments` — list all shipments, with filters (status, customer, tracking number)
   - `POST /admin/shipments` — create shipment (validates `customer_id` exists)
   - `PUT /admin/shipments/{id}` — update status/carrier/address/estimated_delivery
@@ -27,9 +27,14 @@ Neither `auth.py` nor `admin.py` exist yet in `backend/src/secureship/`; both ar
   - `GET /admin/dashboard` — summary stats (counts by status, recent shipments)
   - Auth0 login/callback: `GET /admin/login` (redirect to Auth0 Universal Login), `GET /admin/callback` (exchange code, set session/cookie)
 
-- [ ] **Soft Delete Migration** — Alembic revision adding `deleted_at` (nullable timestamp) to `shipments`
-  - `DELETE /admin/shipments/{id}` sets `deleted_at` rather than removing the row
-  - `lookup_shipments()` / `get_shipment_status()` in `tools.py` must filter out soft-deleted rows so customers don't see them — small, explicit change to the existing customer-facing query, not a new enforcement pattern
+- [x] **Soft Delete Migration** — Alembic revision adding `deleted_at` (nullable timestamp) to `shipments` ✅ **COMPLETE**
+  - ✅ Migration file: `backend/alembic/versions/0002_add_deleted_at_to_shipments.py`
+  - ✅ `deleted_at` column added to `Shipment` model with index
+  - ✅ `DELETE /admin/shipments/{id}` sets `deleted_at` rather than removing the row
+  - ✅ `lookup_shipments()` / `get_shipment_status()` / `get_shipment_details()` in `tools.py` filter out soft-deleted rows
+  - ✅ Admin endpoints support `include_deleted` parameter
+  - ✅ Comprehensive test suite: `backend/tests/test_soft_delete.py`
+  - ✅ Documentation: `docs/SOFT_DELETE_IMPLEMENTATION.md`
 
 - [ ] **Test: Admin Endpoint Authorization**
   - No token / invalid token / expired token → 401 on every `/admin/*` route
@@ -56,7 +61,7 @@ Neither `auth.py` nor `admin.py` exist yet in `backend/src/secureship/`; both ar
 - [ ] **Tests** — extend backend test suite
   - `test_admin_auth.py` — missing/invalid/expired token rejected; valid token allowed
   - `test_admin_shipments.py` — create/update/soft-delete CRUD correctness
-  - `test_tools_excludes_deleted.py` — soft-deleted shipment invisible to `lookup_shipments()`/`get_shipment_status()`
+  - [x] `test_soft_delete.py` — ✅ **COMPLETE**: soft-deleted shipment invisible to all customer-facing tools
 
 ---
 
@@ -80,7 +85,7 @@ Neither `auth.py` nor `admin.py` exist yet in `backend/src/secureship/`; both ar
 | Admin CRUD endpoints (shipments, packages) | [ ] New: `admin.py` |
 | Admin login/callback flow | [ ] New: `/admin/login`, `/admin/callback` |
 | Admin dashboard UI | [ ] New: `frontend/src/pages/admin/` |
-| Soft delete support | [*] Not explicitly in DEV_PLAN's Week 4 section (which says "DELETE ... soft delete") but requires a migration DEV_PLAN doesn't call out — added here |
+| Soft delete support | [x] ✅ **COMPLETE**: Migration + model + tool updates + admin API + tests |
 | Customer visibility of new shipments | [ ] Manual test: admin creates shipment → customer immediately sees it via `lookup_shipments` |
 
 ---
