@@ -3,8 +3,6 @@
 import logging
 import uuid
 
-logging.basicConfig(level=logging.DEBUG)
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -20,6 +18,9 @@ from .database import (
 )
 from .session import SessionState, session_manager
 from .tools import execute_tool
+
+logging.basicConfig(level=logging.DEBUG)
+
 
 logger = logging.getLogger(__name__)
 

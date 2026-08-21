@@ -11,15 +11,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-
-logger = logging.getLogger(__name__)
 
 from .database import AsyncSessionLocal
 from .identity import verify_identity_db
 from .models import Package, Shipment
 from .session import Session, SessionState, session_manager
 from .sms import CODE_EXPIRY_MINUTES, MAX_CODE_ATTEMPTS, generate_code, send_sms
+
+logger = logging.getLogger(__name__)
+
 
 _MAX_CASE_FACT_DEPTH = 4
 _MAX_CASE_FACT_LIST_ITEMS = 50
@@ -390,14 +390,20 @@ def _escalate_to_human(session: Session) -> dict[str, Any]:
 
 async def _lookup_shipments(session: Session) -> dict[str, Any]:
     """Return all shipments for this verified session's customer only."""
-    logger.debug("lookup_shipments: verified=%s, customer_id=%s", session.verified, session.customer_id)
+    logger.debug(
+        "lookup_shipments: verified=%s, customer_id=%s",
+        session.verified,
+        session.customer_id,
+    )
     if not session.verified or session.customer_id is None:
         return {"status": "not_verified", "shipments": []}
 
     try:
         shipments = await _load_all_shipments_for_customer(session.customer_id)
-        logger.debug("lookup_shipments: found %d shipments", len(shipments) if shipments else 0)
-    except Exception as e:
+        logger.debug(
+            "lookup_shipments: found %d shipments", len(shipments) if shipments else 0
+        )
+    except Exception:
         logger.exception("lookup_shipments: exception loading shipments")
         return {"status": "unavailable", "shipments": []}
 
@@ -492,12 +498,14 @@ async def _load_all_shipments_for_customer(
                 .order_by(Shipment.last_update.desc())
             )
             shipments = result.scalars().all()
-            logger.debug("Query returned %d shipments", len(shipments) if shipments else 0)
+            logger.debug(
+                "Query returned %d shipments", len(shipments) if shipments else 0
+            )
             # Convert to dicts while still in active session
             result_list = []
             for s in shipments:
                 # Get packages in same session before converting
-                await db.refresh(s, attribute_names=['packages'])
+                await db.refresh(s, attribute_names=["packages"])
                 result_list.append(_shipment_to_dict(s))
             logger.debug("Returning %d shipment dicts", len(result_list))
             return result_list

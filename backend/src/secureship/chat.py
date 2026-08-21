@@ -104,7 +104,11 @@ async def stream_chat_response(
         \\x00{"s": "<state>", "sid": "<session_id>"}
     """
     system_prompt = _build_system_prompt(session)
-    logger.debug("stream_chat_response: session_state=%s, customer_id=%s", session.state.value, session.customer_id)
+    logger.debug(
+        "stream_chat_response: session_state=%s, customer_id=%s",
+        session.state.value,
+        session.customer_id,
+    )
     full_messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         *messages,
@@ -119,7 +123,9 @@ async def stream_chat_response(
 
     # Tool-calling loop — at most _MAX_TOOL_ROUNDS rounds
     for _round in range(_MAX_TOOL_ROUNDS):
-        logger.debug("Tool-calling round %d, message count: %d", _round, len(full_messages))
+        logger.debug(
+            "Tool-calling round %d, message count: %d", _round, len(full_messages)
+        )
         tool_calls = await _call_ollama_for_tools(full_messages)
         logger.debug("Round %d: got %d tool calls", _round, len(tool_calls))
 
@@ -148,7 +154,11 @@ async def stream_chat_response(
             # Capture last successful shipment tool result for the metadata channel
             if name in _SHIPMENT_TOOLS and result.get("status") == "ok":
                 last_shipment_result = {"tool": name, "data": result}
-            tool_result_msg = {"role": "tool", "content": json.dumps(result), "name": name}
+            tool_result_msg = {
+                "role": "tool",
+                "content": json.dumps(result),
+                "name": name,
+            }
             logger.debug("Appending tool result message: %s", tool_result_msg)
             full_messages.append(tool_result_msg)
 
@@ -156,36 +166,66 @@ async def stream_chat_response(
             if name == "check_verification_code" and result.get("status") == "verified":
                 # Check if the user's original message (or recent messages) mention shipments
                 user_message = next(
-                    (m.get("content", "").lower() for m in reversed(full_messages)
-                     if m.get("role") == "user"),
-                    ""
+                    (
+                        m.get("content", "").lower()
+                        for m in reversed(full_messages)
+                        if m.get("role") == "user"
+                    ),
+                    "",
                 )
-                shipment_keywords = {"shipment", "order", "parcel", "package", "delivery", "track", "status"}
+                shipment_keywords = {
+                    "shipment",
+                    "order",
+                    "parcel",
+                    "package",
+                    "delivery",
+                    "track",
+                    "status",
+                }
                 if any(kw in user_message for kw in shipment_keywords):
                     logger.debug(
                         "Verified user asked about shipments ('%s'); auto-calling lookup_shipments",
-                        user_message[:50]
+                        user_message[:50],
                     )
                     # Reload session from DB to ensure latest state
                     from .database import load_session_data  # noqa: E402
+
                     try:
-                        db_state, db_customer_id, db_case_facts = await load_session_data(session_id)
+                        db_state, db_customer_id, db_case_facts = (
+                            await load_session_data(session_id)
+                        )
                         if db_customer_id:
                             session.customer_id = db_customer_id
                         session.state = SessionState(db_state)
-                        from .session import session_manager  # avoid circular import at module level
+                        from .session import (
+                            session_manager,
+                        )  # avoid circular import at module level
+
                         session_manager.update(session)
-                        logger.debug("Reloaded session from DB: state=%s, customer_id=%s", db_state, db_customer_id)
+                        logger.debug(
+                            "Reloaded session from DB: state=%s, customer_id=%s",
+                            db_state,
+                            db_customer_id,
+                        )
                     except Exception as e:
                         logger.warning("Failed to reload session from DB: %s", e)
 
                     # Now call lookup_shipments
-                    shipment_result = await execute_tool("lookup_shipments", {}, session_id)
+                    shipment_result = await execute_tool(
+                        "lookup_shipments", {}, session_id
+                    )
                     logger.debug("Auto-called lookup_shipments → %s", shipment_result)
                     if shipment_result.get("status") == "ok":
-                        last_shipment_result = {"tool": "lookup_shipments", "data": shipment_result}
+                        last_shipment_result = {
+                            "tool": "lookup_shipments",
+                            "data": shipment_result,
+                        }
                     full_messages.append(
-                        {"role": "tool", "content": json.dumps(shipment_result), "name": "lookup_shipments"}
+                        {
+                            "role": "tool",
+                            "content": json.dumps(shipment_result),
+                            "name": "lookup_shipments",
+                        }
                     )
     else:
         logger.warning(
