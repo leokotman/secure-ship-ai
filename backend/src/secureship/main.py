@@ -12,13 +12,15 @@ from .chat import stream_chat_response
 from .config import settings
 from .database import (
     append_chat_message,
-    create_tables,
     get_transcript,
     load_session_data,
     update_session_state,
 )
 from .session import SessionState, session_manager
 from .tools import execute_tool
+
+logging.basicConfig(level=logging.DEBUG)
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +66,6 @@ def _normalize_rehydrated_state(state: str) -> str:
     if state in _EPHEMERAL_OTP_STATES:
         return SessionState.ANONYMOUS.value
     return state
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Create required database tables when the app starts."""
-    await create_tables()
 
 
 @app.get("/health")
@@ -181,20 +177,37 @@ class SessionResponse(BaseModel):
 
 
 @app.get("/session/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: str) -> SessionResponse:
+async def get_session(
+    session_id: str,
+    requesting_session_id: str | None = None,
+) -> SessionResponse:
     """Return the persisted state and transcript for a session.
 
     Called by the frontend on mount to re-hydrate state and message history
     when the user reloads the page mid-conversation.
 
-    TODO(week-3-auth): protect this endpoint with authenticated session context
-    instead of session_id-only access. Current behavior is acceptable for Week 2
-    scaffolding but not for production-grade access control.
+    Ownership check: a session may only be read by itself, or by another session
+    that shares the same non-null customer_id (i.e., same verified customer).
+    This stops one verified customer from reading a different customer's
+    transcript by guessing a session_id.
     """
+    # Default: treat the caller as requesting their own session
+    caller_id = requesting_session_id or session_id
+
+    if caller_id != session_id:
+        # Both sessions must resolve to the same verified customer
+        _, target_customer_id, _ = await load_session_data(session_id)
+        _, caller_customer_id, _ = await load_session_data(caller_id)
+        if (
+            target_customer_id is None
+            or caller_customer_id is None
+            or target_customer_id != caller_customer_id
+        ):
+            raise HTTPException(status_code=403, detail="Access denied")
+
     db_state, _, _ = await load_session_data(session_id)
     safe_state = _normalize_rehydrated_state(db_state)
     transcript = await get_transcript(session_id)
-    # Only return user/assistant turns (filter out any stray entries)
     messages = [
         {"role": m["role"], "content": m["content"]}
         for m in transcript

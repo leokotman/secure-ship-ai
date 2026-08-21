@@ -227,7 +227,6 @@ async def seed() -> None:
     random.seed(42)
     conn = await asyncpg.connect(_database_url())
     try:
-        await create_schema(conn)
         await conn.execute(
             "TRUNCATE TABLE packages, shipments, customers RESTART IDENTITY CASCADE"
         )

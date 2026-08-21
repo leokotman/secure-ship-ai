@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint format clean
+.PHONY: help install dev test lint format clean migrate
 
 VENV := ../.venv
 PYTHON ?= $(VENV)/bin/python3
@@ -7,6 +7,7 @@ help:
 	@echo "SecureShip Backend Commands"
 	@echo "install       - Install dependencies"
 	@echo "dev           - Run development server"
+	@echo "migrate       - Run Alembic migrations (requires running Postgres)"
 	@echo "test          - Run tests"
 	@echo "lint          - Run linters"
 	@echo "format        - Format code"
@@ -17,6 +18,9 @@ install:
 
 dev:
 	uvicorn secureship.main:app --reload --host 0.0.0.0 --port 8000
+
+migrate:
+	alembic upgrade head
 
 test:
 	pytest

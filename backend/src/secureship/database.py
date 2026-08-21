@@ -16,10 +16,10 @@ class Base(DeclarativeBase):
     """Base declarative class for SQLAlchemy models."""
 
 
-class ChatSession(Base):
+class Conversation(Base):
     """Persisted transcript and identity-gate state per chat session."""
 
-    __tablename__ = "chat_sessions"
+    __tablename__ = "conversations"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -69,12 +69,12 @@ async def append_chat_turn(
     """Append a user and assistant turn to the persisted transcript for a session."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(ChatSession).where(ChatSession.session_id == session_id)
+            select(Conversation).where(Conversation.session_id == session_id)
         )
         record = result.scalar_one_or_none()
 
         if record is None:
-            record = ChatSession(
+            record = Conversation(
                 session_id=session_id,
                 transcript=[
                     {"role": "user", "content": user_message},
@@ -100,12 +100,12 @@ async def append_chat_message(
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(ChatSession).where(ChatSession.session_id == session_id)
+            select(Conversation).where(Conversation.session_id == session_id)
         )
         record = result.scalar_one_or_none()
 
         if record is None:
-            record = ChatSession(
+            record = Conversation(
                 session_id=session_id,
                 transcript=[{"role": role, "content": content}],
             )
@@ -122,7 +122,7 @@ async def get_transcript(session_id: str) -> list[dict[str, Any]]:
     """Return the full conversation history for a session (user + assistant turns)."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(ChatSession).where(ChatSession.session_id == session_id)
+            select(Conversation).where(Conversation.session_id == session_id)
         )
         record = result.scalar_one_or_none()
         if record is None:
@@ -136,14 +136,14 @@ async def update_session_state(
     customer_id: Optional[uuid.UUID] = None,
     case_facts: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Sync state, optional customer_id, and optional case_facts to the ChatSession row."""
+    """Sync state, optional customer_id, and optional case_facts to the Conversation row."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(ChatSession).where(ChatSession.session_id == session_id)
+            select(Conversation).where(Conversation.session_id == session_id)
         )
         record = result.scalar_one_or_none()
         if record is None:
-            record = ChatSession(
+            record = Conversation(
                 session_id=session_id,
                 state=state,
                 transcript=[],
@@ -169,7 +169,7 @@ async def load_session_data(
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(ChatSession).where(ChatSession.session_id == session_id)
+            select(Conversation).where(Conversation.session_id == session_id)
         )
         record = result.scalar_one_or_none()
         if record is None:
