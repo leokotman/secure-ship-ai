@@ -57,12 +57,17 @@ State: {state}
 - For the code entry step, tell the customer to enter the code in the box shown,
   or type it in the chat.
 - After verification, acknowledge it and ask how you can help.
-- **When a verified customer asks about their shipments, ALWAYS call a tool first:**
-    - If they ask without a tracking number, call `lookup_shipments` (no args).
+- **When a verified customer asks about their shipments, YOU MUST ALWAYS CALL A TOOL FIRST:**
+    - If they ask without a specific tracking number, call `lookup_shipments` (no args).
       It returns all their shipments; summarise the results in your reply.
     - If they provide a tracking number, call `get_shipment_status` with that number.
-    - Do NOT answer shipment questions without first calling a tool.
-    - Do NOT make up or guess shipment data — only use data from tool results.
+    - **CRITICAL: NEVER answer shipment questions from memory or prior context.**
+      **You MUST call lookup_shipments or get_shipment_status EVERY SINGLE TIME**
+      **a customer asks about their shipments, even if you think you already know.**
+    - **NEVER make up shipment data. NEVER guess tracking numbers.**
+    - **NEVER invent tracking numbers like SHIP123456 or similar.**
+    - **ONLY use data that comes from tool call results.**
+    - **If you don't have a tool result for the current question, call the tool first.**
 - To fetch full details for a specific shipment, call `get_shipment_details` with
     the `shipment_id` from a prior `lookup_shipments` or `get_shipment_status`
     result — NEVER use a shipment_id typed by the customer directly.
@@ -87,6 +92,57 @@ def _build_system_prompt(session: Session) -> str:
         name_hint=name_hint,
         case_facts_block=case_facts_block,
     )
+
+
+def _extract_tracking_number(text: str) -> str | None:
+    """Extract tracking number from user message if present.
+
+    Only matches realistic tracking number patterns:
+    - Starts with letters (2+) or starts with alphanumeric
+    - Has at least 8 characters total
+    - May contain hyphens
+    Examples: ADMIN-TEST-001, SS2608000057, 1Z999AA10123456784
+    """
+    import re
+
+    text_clean = re.sub(r"[^\w\s-]", "", text.upper())  # Remove ? ! , . etc
+    # Match patterns like ADMIN-TEST-001, SS2608000057, but not random words
+    patterns = [
+        r"\b([A-Z]{2,}[-][A-Z0-9]{3,}[0-9]{3,})\b",  # ADMIN-TEST-001 style
+        r"\b([A-Z]{2}\d{10,})\b",  # SS2608000057 style
+        r"\b(1Z[0-9A-Z]{16})\b",  # UPS format
+        r"\b(\d{12,})\b",  # FedEx/USPS numeric
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text_clean)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _is_shipment_query(text: str) -> bool:
+    """Check if user message is asking about shipments."""
+    shipment_keywords = {
+        "shipment",
+        "order",
+        "parcel",
+        "package",
+        "delivery",
+        "track",
+        "status",
+        "where",
+        "update",
+        "eta",
+        "delivered",
+        "transit",
+        "carrier",
+        "fedex",
+        "ups",
+        "usps",
+        "dhl",
+    }
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in shipment_keywords)
 
 
 async def stream_chat_response(
@@ -127,14 +183,70 @@ async def stream_chat_response(
             "Tool-calling round %d, message count: %d", _round, len(full_messages)
         )
         tool_calls = await _call_ollama_for_tools(full_messages)
-        logger.debug("Round %d: got %d tool calls", _round, len(tool_calls))
+        logger.debug(
+            "Round %d complete: got %d tool calls, %d messages in history",
+            _round,
+            len(tool_calls),
+            len(full_messages),
+        )
 
         if not tool_calls:
-            # No more tools — stream the final text response
-            logger.debug("No more tool calls, streaming final response")
-            async for chunk in _stream_ollama(full_messages):
-                yield chunk
-            break
+            # ENFORCEMENT: If verified customer asked about shipments but LLM didn't call a tool,
+            # force the tool call to ensure fresh data
+            # Check on ANY round (not just round 0) because verification may take multiple rounds
+            if session.state == SessionState.VERIFIED:
+                last_user_msg = next(
+                    (
+                        m.get("content", "")
+                        for m in reversed(full_messages)
+                        if m.get("role") == "user"
+                    ),
+                    "",
+                )
+                if _is_shipment_query(last_user_msg):
+                    logger.warning(
+                        "LLM tried to answer shipment query without calling tool. Forcing tool call. Message: %s",
+                        last_user_msg[:100],
+                    )
+                    # Extract tracking number if present (only realistic patterns)
+                    tracking = _extract_tracking_number(last_user_msg)
+                    if (
+                        tracking and len(tracking) >= 8
+                    ):  # Minimum realistic tracking number length
+                        # Force get_shipment_status call
+                        forced_tool_call = {
+                            "function": {
+                                "name": "get_shipment_status",
+                                "arguments": {"tracking_number": tracking},
+                            }
+                        }
+                        logger.debug(
+                            "Forcing get_shipment_status with tracking=%s", tracking
+                        )
+                    else:
+                        # Force lookup_shipments call (this is the most common case)
+                        forced_tool_call = {
+                            "function": {"name": "lookup_shipments", "arguments": {}}
+                        }
+                        logger.debug(
+                            "Forcing lookup_shipments (no valid tracking number found in: %s)",
+                            last_user_msg[:50],
+                        )
+
+                    tool_calls = [forced_tool_call]
+                    # Continue to tool execution instead of breaking
+                else:
+                    # Not a shipment query, stream final response
+                    logger.debug("No more tool calls, streaming final response")
+                    async for chunk in _stream_ollama(full_messages):
+                        yield chunk
+                    break
+            else:
+                # No more tools — stream the final text response
+                logger.debug("No more tool calls, streaming final response")
+                async for chunk in _stream_ollama(full_messages):
+                    yield chunk
+                break
 
         # Execute each tool and append results to the message thread
         full_messages.append(
@@ -164,14 +276,12 @@ async def stream_chat_response(
 
             # After verification succeeds, if user asked about shipments, auto-call lookup_shipments
             if name == "check_verification_code" and result.get("status") == "verified":
-                # Check if the user's original message (or recent messages) mention shipments
-                user_message = next(
-                    (
-                        m.get("content", "").lower()
-                        for m in reversed(full_messages)
-                        if m.get("role") == "user"
-                    ),
-                    "",
+                # Check if ANY user message in the conversation mentioned shipments
+                # (the first message likely had the request, but the most recent was just the code)
+                all_user_messages = " ".join(
+                    m.get("content", "").lower()
+                    for m in full_messages
+                    if m.get("role") == "user"
                 )
                 shipment_keywords = {
                     "shipment",
@@ -182,35 +292,26 @@ async def stream_chat_response(
                     "track",
                     "status",
                 }
-                if any(kw in user_message for kw in shipment_keywords):
+                if any(kw in all_user_messages for kw in shipment_keywords):
                     logger.debug(
-                        "Verified user asked about shipments ('%s'); auto-calling lookup_shipments",
-                        user_message[:50],
+                        "Verified user asked about shipments (found keywords in: '%s'); auto-calling lookup_shipments",
+                        all_user_messages[:100],
                     )
-                    # Reload session from DB to ensure latest state
-                    from .database import load_session_data  # noqa: E402
+                    # DON'T reload from DB here! The session was just updated by check_verification_code
+                    # in the same request, and the DB commit may not have happened yet (race condition).
+                    # Trust the in-memory session that was already updated by execute_tool.
+                    from .session import session_manager
 
-                    try:
-                        db_state, db_customer_id, db_case_facts = (
-                            await load_session_data(session_id)
-                        )
-                        if db_customer_id:
-                            session.customer_id = db_customer_id
-                        session.state = SessionState(db_state)
-                        from .session import (
-                            session_manager,
-                        )  # avoid circular import at module level
+                    # Refresh our local reference to get the updated session
+                    session = session_manager.get(session_id) or session
+                    logger.debug(
+                        "Using in-memory session: state=%s, customer_id=%s, verified=%s",
+                        session.state.value,
+                        session.customer_id,
+                        session.verified,
+                    )
 
-                        session_manager.update(session)
-                        logger.debug(
-                            "Reloaded session from DB: state=%s, customer_id=%s",
-                            db_state,
-                            db_customer_id,
-                        )
-                    except Exception as e:
-                        logger.warning("Failed to reload session from DB: %s", e)
-
-                    # Now call lookup_shipments
+                    # Now call lookup_shipments (will use the verified session)
                     shipment_result = await execute_tool(
                         "lookup_shipments", {}, session_id
                     )
@@ -228,10 +329,14 @@ async def stream_chat_response(
                         }
                     )
     else:
+        # Max rounds reached — stream whatever the LLM's last response was
         logger.warning(
-            "Max tool rounds (%d) reached for session %s", _MAX_TOOL_ROUNDS, session_id
+            "Max tool rounds (%d) reached for session %s; streaming final response",
+            _MAX_TOOL_ROUNDS,
+            session_id,
         )
-        yield "I'm having trouble processing your request right now. Please try again."
+        async for chunk in _stream_ollama(full_messages):
+            yield chunk
 
     # Emit the final session state as a null-byte-delimited metadata chunk
     from .session import session_manager  # avoid circular import at module level

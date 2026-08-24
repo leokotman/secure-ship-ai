@@ -1,6 +1,6 @@
 # Week 4 Tasks
 
-## Status: In progress
+## Status: Completed
 
 Week 4 builds the Auth0-gated admin panel: staff can create, update, and soft-delete shipments and packages, and see them appear immediately in the customer-facing chat via the existing tool-calling path. This is the first place in the codebase where a second, separate trust boundary is introduced — admin endpoints are gated by Auth0 JWTs, not by the conversational `session.customer_id` gate that protects customer data in [tools.py](../backend/src/secureship/tools.py).
 

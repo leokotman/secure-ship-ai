@@ -450,6 +450,11 @@ async def _get_shipment_status(
             session.customer_id, normalized
         )
     except Exception:
+        logger.exception(
+            "get_shipment_status: exception for tracking=%s, customer_id=%s",
+            normalized,
+            session.customer_id,
+        )
         return {"status": "unavailable", "shipment": None}
 
     if shipment is None:
@@ -539,11 +544,36 @@ async def _load_shipment_for_customer_and_id(
         shipment = result.scalar_one_or_none()
         if shipment is None:
             return None
+        # Fetch packages separately to avoid lazy-load in async context
         pkg_result = await db.execute(
             select(Package).where(Package.shipment_id == shipment.id)
         )
-        shipment.packages = list(pkg_result.scalars().all())
-        return _shipment_to_dict(shipment)
+        packages = list(pkg_result.scalars().all())
+        # Convert to dict while still in session, passing packages explicitly
+        return {
+            "id": str(shipment.id),
+            "tracking_number": shipment.tracking_number,
+            "status": shipment.status,
+            "carrier": shipment.carrier,
+            "origin": shipment.origin,
+            "destination": shipment.destination,
+            "estimated_delivery": (
+                shipment.estimated_delivery.isoformat()
+                if shipment.estimated_delivery
+                else None
+            ),
+            "last_update": (
+                shipment.last_update.isoformat() if shipment.last_update else None
+            ),
+            "packages": [
+                {
+                    "description": p.description,
+                    "weight_kg": str(p.weight_kg),
+                    "declared_value": str(p.declared_value),
+                }
+                for p in sorted(packages, key=lambda p: p.description)
+            ],
+        }
 
 
 async def _load_shipment_for_customer_and_tracking(
@@ -554,6 +584,12 @@ async def _load_shipment_for_customer_and_tracking(
 
     Excludes soft-deleted shipments.
     """
+    logger.debug(
+        "_load_shipment_for_customer_and_tracking: customer_id=%s (type=%s), tracking=%s",
+        customer_id,
+        type(customer_id).__name__,
+        tracking_number,
+    )
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Shipment).where(
@@ -563,13 +599,61 @@ async def _load_shipment_for_customer_and_tracking(
             )
         )
         shipment = result.scalar_one_or_none()
+        logger.debug(
+            "_load_shipment_for_customer_and_tracking: shipment=%s",
+            shipment.id if shipment else None,
+        )
         if shipment is None:
+            # Debug: check if shipment exists at all (ignoring customer_id)
+            all_result = await db.execute(
+                select(Shipment).where(
+                    Shipment.tracking_number == tracking_number,
+                    Shipment.deleted_at.is_(None),
+                )
+            )
+            any_shipment = all_result.scalar_one_or_none()
+            if any_shipment:
+                logger.warning(
+                    "Shipment %s exists but customer_id mismatch: expected=%s, actual=%s",
+                    tracking_number,
+                    customer_id,
+                    any_shipment.customer_id,
+                )
+            else:
+                logger.warning(
+                    "Shipment %s not found in database at all", tracking_number
+                )
             return None
+        # Fetch packages separately to avoid lazy-load in async context
         pkg_result = await db.execute(
             select(Package).where(Package.shipment_id == shipment.id)
         )
-        shipment.packages = list(pkg_result.scalars().all())
-        return _shipment_to_dict(shipment)
+        packages = list(pkg_result.scalars().all())
+        # Convert to dict while still in session, passing packages explicitly
+        return {
+            "id": str(shipment.id),
+            "tracking_number": shipment.tracking_number,
+            "status": shipment.status,
+            "carrier": shipment.carrier,
+            "origin": shipment.origin,
+            "destination": shipment.destination,
+            "estimated_delivery": (
+                shipment.estimated_delivery.isoformat()
+                if shipment.estimated_delivery
+                else None
+            ),
+            "last_update": (
+                shipment.last_update.isoformat() if shipment.last_update else None
+            ),
+            "packages": [
+                {
+                    "description": p.description,
+                    "weight_kg": str(p.weight_kg),
+                    "declared_value": str(p.declared_value),
+                }
+                for p in sorted(packages, key=lambda p: p.description)
+            ],
+        }
 
 
 def _update_case_facts(session: Session, args: dict[str, Any]) -> dict[str, Any]:

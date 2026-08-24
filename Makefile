@@ -46,7 +46,7 @@ nuke:
 
 seed:
 	DATABASE_URL=postgresql://postgres:postgres@localhost:5432/secureship \
-	  python scripts/seed_data.py
+	  python3 scripts/seed_data.py
 
 
 	@echo "Installing backend..."

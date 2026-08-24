@@ -36,6 +36,8 @@ services:
   frontend:
     build:
       context: ./frontend
+    env_file:
+      - ./frontend/.env
     environment:
       BACKEND_API_URL: http://backend:8000
       NEXT_PUBLIC_API_URL: http://localhost:8000
