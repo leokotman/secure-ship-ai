@@ -1,6 +1,6 @@
 # Week 3 Tasks
 
-## Status: In Progress
+## Status: Completed
 
 Week 3 implements persistent session management and real shipment data lookups from the database. Verified users now get actual answers from the PostgreSQL schema established in Week 1. The enforcement point — `session.customer_id` checked before any data tool executes — is the only path to shipment data.
 

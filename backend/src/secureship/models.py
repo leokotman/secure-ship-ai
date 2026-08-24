@@ -62,6 +62,9 @@ class Shipment(Base):
     last_update: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     customer: Mapped["Customer"] = relationship("Customer", back_populates="shipments")
     packages: Mapped[list["Package"]] = relationship(

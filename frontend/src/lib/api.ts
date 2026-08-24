@@ -5,7 +5,7 @@
  * never reaches the browser.
  */
 
-import type { ChatState } from '@/stores/sessionStore';
+import type { ChatState } from "@/stores/sessionStore";
 
 export interface ChatRequest {
   message: string;
@@ -34,7 +34,10 @@ export interface StreamChatResult {
   sessionId?: string;
   sessionState?: ChatState;
   /** Present when a shipment tool returned status=ok this turn. */
-  shipment?: { tool: string; data: { shipments?: ShipmentPayload[]; shipment?: ShipmentPayload } };
+  shipment?: {
+    tool: string;
+    data: { shipments?: ShipmentPayload[]; shipment?: ShipmentPayload };
+  };
 }
 
 /**
@@ -48,11 +51,11 @@ export interface StreamChatResult {
  */
 export async function streamChat(
   request: ChatRequest,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
 ): Promise<StreamChatResult> {
-  const response = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
 
@@ -62,14 +65,14 @@ export async function streamChat(
 
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error('Response body is not readable');
+    throw new Error("Response body is not readable");
   }
 
   const decoder = new TextDecoder();
   // Buffer for the JSON metadata that follows a null byte
   const stateBuffer: string[] = [];
   let pastNullByte = false;
-  let returnedSessionId = response.headers.get('x-session-id') ?? undefined;
+  let returnedSessionId = response.headers.get("x-session-id") ?? undefined;
   let sessionState: ChatState | undefined;
 
   try {
@@ -85,7 +88,7 @@ export async function streamChat(
         continue;
       }
 
-      const nullIdx = raw.indexOf('\x00');
+      const nullIdx = raw.indexOf("\x00");
       if (nullIdx !== -1) {
         // Text before the null byte is normal content
         const textPart = raw.substring(0, nullIdx);
@@ -106,14 +109,19 @@ export async function streamChat(
   // Parse state event
   if (stateBuffer.length > 0) {
     try {
-      const meta = JSON.parse(stateBuffer.join('')) as {
+      const meta = JSON.parse(stateBuffer.join("")) as {
         s?: string;
         sid?: string;
-        shipment?: StreamChatResult['shipment'];
+        shipment?: StreamChatResult["shipment"];
       };
       if (meta.s) sessionState = meta.s as ChatState;
       if (meta.sid) returnedSessionId = meta.sid;
-      if (meta.shipment) return { sessionId: returnedSessionId, sessionState, shipment: meta.shipment };
+      if (meta.shipment)
+        return {
+          sessionId: returnedSessionId,
+          sessionState,
+          shipment: meta.shipment,
+        };
     } catch {
       // Malformed metadata — ignore; UI state stays unchanged
     }
@@ -124,7 +132,7 @@ export async function streamChat(
 
 export interface SessionData {
   state: ChatState;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 /**
@@ -132,10 +140,12 @@ export interface SessionData {
  * Called on mount to re-hydrate the UI after a page reload.
  * Returns null if the session does not exist yet.
  */
-export async function getSession(sessionId: string): Promise<SessionData | null> {
+export async function getSession(
+  sessionId: string,
+): Promise<SessionData | null> {
   const params = new URLSearchParams({ requesting_session_id: sessionId });
   const response = await fetch(
-    `/api/session/${encodeURIComponent(sessionId)}?${params.toString()}`
+    `/api/session/${encodeURIComponent(sessionId)}?${params.toString()}`,
   );
   if (response.status === 404) return null;
   if (!response.ok) return null;
@@ -151,28 +161,31 @@ export interface VerifySmsResponse {
   verified: boolean;
   state: ChatState;
   reason?:
-  | 'expired'
-  | 'incorrect_code'
-  | 'max_attempts_exceeded'
-  | 'code_resent'
-  | 'no_active_code';
+    | "expired"
+    | "incorrect_code"
+    | "max_attempts_exceeded"
+    | "code_resent"
+    | "no_active_code";
 }
 
 /**
  * Submit a 6-digit SMS verification code via the BFF proxy.
  */
 export async function verifySmsCode(
-  request: VerifySmsRequest
+  request: VerifySmsRequest,
 ): Promise<VerifySmsResponse> {
-  const response = await fetch('/api/verify-sms', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch("/api/verify-sms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
 
-  const payload = await response.json() as Partial<VerifySmsResponse>;
+  const payload = (await response.json()) as Partial<VerifySmsResponse>;
   if (!response.ok) {
-    if (typeof payload.verified === 'boolean' && typeof payload.state === 'string') {
+    if (
+      typeof payload.verified === "boolean" &&
+      typeof payload.state === "string"
+    ) {
       return payload as VerifySmsResponse;
     }
     throw new Error(`Verification API error: ${response.statusText}`);
@@ -180,4 +193,3 @@ export async function verifySmsCode(
 
   return payload as VerifySmsResponse;
 }
-

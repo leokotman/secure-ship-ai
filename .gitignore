@@ -53,3 +53,5 @@ out/
 secrets/
 *.log
 frontend/tsconfig.tsbuildinfo
+
+.codemie/
