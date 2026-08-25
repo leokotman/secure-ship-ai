@@ -17,6 +17,7 @@ from .identity import verify_identity_db
 from .models import Package, Shipment
 from .session import Session, SessionState, session_manager
 from .sms import CODE_EXPIRY_MINUTES, MAX_CODE_ATTEMPTS, generate_code, send_sms
+from .validation import is_e164_phone
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +287,13 @@ async def _verify_identity(session: Session, args: dict[str, Any]) -> dict[str, 
     session.phone = phone
     session.state = SessionState.COLLECTING_IDENTITY
     session_manager.update(session)
+
+    if not is_e164_phone(phone):
+        return {
+            "status": "invalid_phone",
+            "next_step": "ask_for_phone_in_e164",
+            "message": "Phone must be in E.164 format (e.g. +14155551234).",
+        }
 
     customer_id: uuid.UUID | None = await verify_identity_db(
         first_name, last_name, phone, fallback_hint

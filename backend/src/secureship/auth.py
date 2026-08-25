@@ -83,22 +83,25 @@ async def verify_admin_token(
     - Issuer (iss)
     """
     token = credentials.credentials
-    logger.info(f"🔍 Verifying token (first 30 chars): {token[:30]}...")
-    logger.info(f"📋 Expected audience: {settings.auth0_audience}")
-    logger.info(f"📋 Expected issuer: https://{settings.auth0_domain}/")
+    logger.info("Verifying admin JWT")
+    logger.debug(
+        "Expected audience=%s issuer=https://%s/",
+        settings.auth0_audience,
+        settings.auth0_domain,
+    )
+
+    # Reject malformed tokens before any Auth0 network call
+    kid = get_kid_from_token(token)
+    if not kid:
+        logger.warning("No kid in token header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format",
+        )
 
     try:
         # Get JWKS to verify signature
         jwks = await _jwks_cache.get_jwks()
-
-        # Extract kid from token header
-        kid = get_kid_from_token(token)
-        if not kid:
-            logger.warning("No kid in token header")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token format",
-            )
 
         # Find the key in JWKS
         key = None
@@ -108,7 +111,7 @@ async def verify_admin_token(
                 break
 
         if not key:
-            logger.warning(f"No matching key found for kid: {kid}")
+            logger.warning("No matching key found for kid")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token",
@@ -126,9 +129,11 @@ async def verify_admin_token(
             issuer=f"https://{settings.auth0_domain}/",
         )
 
-        logger.debug(f"Token verified for sub: {payload.get('sub')}")
+        logger.debug("Token verified for sub=%s", payload.get("sub"))
         return payload
 
+    except HTTPException:
+        raise
     except jwt.ExpiredSignatureError:
         logger.warning("Token has expired")
         raise HTTPException(

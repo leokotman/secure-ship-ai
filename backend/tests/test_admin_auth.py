@@ -373,15 +373,24 @@ class TestVerifyAdminToken:
 
     @pytest.mark.asyncio
     async def test_verify_admin_token_jwks_fetch_failure(self):
-        """If JWKS fetch fails, should raise 503."""
+        """If JWKS fetch fails for a parseable JWT, should raise 503."""
         from fastapi import HTTPException
+
+        # Well-formed header with kid so we reach the JWKS fetch path
+        header = (
+            jwt.utils.base64url_encode(
+                json.dumps({"alg": "RS256", "typ": "JWT", "kid": "test-kid"}).encode()
+            ).decode()
+        )
+        body = jwt.utils.base64url_encode(b"{}").decode()
+        token = f"{header}.{body}.sig"
 
         with patch("secureship.auth._jwks_cache.get_jwks", new_callable=AsyncMock) as mock_get_jwks:
             mock_get_jwks.side_effect = HTTPException(
                 status_code=503, detail="Auth0 service unavailable"
             )
 
-            credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="some.token.here")
+            credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
             with pytest.raises(HTTPException) as exc_info:
                 await verify_admin_token(credentials)
             assert exc_info.value.status_code == 503

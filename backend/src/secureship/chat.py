@@ -371,18 +371,14 @@ async def _call_ollama_for_tools(
         "stream": False,
     }
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{settings.ollama_host}/api/chat",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
+        data = await _ollama_post_json(payload, timeout=settings.ollama_timeout_seconds)
+    except httpx.TimeoutException:
+        logger.error("Ollama tool-detection call timed out")
+        return []
     except httpx.HTTPError as exc:
         logger.error("Ollama tool-detection call failed: %s", exc)
         return []
 
-    # Debug logging: log full response and what we extract
     logger.debug("Ollama tool-call response keys: %s", list(data.keys()))
     if "message" in data:
         logger.debug("Message keys: %s", list(data["message"].keys()))
@@ -391,6 +387,50 @@ async def _call_ollama_for_tools(
     tool_calls = data.get("message", {}).get("tool_calls") or []
     logger.debug("Extracted tool_calls: %s", tool_calls)
     return tool_calls
+
+
+async def _ollama_post_json(
+    payload: dict[str, Any], *, timeout: float
+) -> dict[str, Any]:
+    """POST to Ollama with light retry on transient failures."""
+    import asyncio
+
+    delay = 0.5
+    last_exc: Exception | None = None
+    attempts = max(1, settings.ollama_max_retries)
+    for attempt in range(attempts):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    f"{settings.ollama_host}/api/chat",
+                    json=payload,
+                )
+                response.raise_for_status()
+                data: dict[str, Any] = response.json()
+                return data
+        except httpx.TimeoutException:
+            raise
+        except (httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            last_exc = exc
+            if attempt + 1 >= attempts:
+                break
+            logger.warning(
+                "Transient Ollama error (attempt %d/%d): %s",
+                attempt + 1,
+                attempts,
+                exc,
+            )
+            await asyncio.sleep(delay)
+            delay *= 2
+        except httpx.HTTPStatusError as exc:
+            # Retry only 5xx
+            if exc.response.status_code < 500 or attempt + 1 >= attempts:
+                raise
+            last_exc = exc
+            await asyncio.sleep(delay)
+            delay *= 2
+    assert last_exc is not None
+    raise last_exc
 
 
 async def _stream_ollama(
@@ -402,24 +442,54 @@ async def _stream_ollama(
         "messages": messages,
         "stream": True,
     }
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{settings.ollama_host}/api/chat",
-                json=payload,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    content = data.get("message", {}).get("content", "")
-                    if isinstance(content, str) and content:
-                        yield content
-    except httpx.HTTPError as exc:
-        logger.error("Ollama streaming call failed: %s", exc)
-        yield "I'm unable to respond right now. Please try again in a moment."
+    import asyncio
+
+    delay = 0.5
+    attempts = max(1, settings.ollama_max_retries)
+    last_exc: Exception | None = None
+
+    for attempt in range(attempts):
+        try:
+            async with httpx.AsyncClient(
+                timeout=settings.ollama_stream_timeout_seconds
+            ) as client:
+                async with client.stream(
+                    "POST",
+                    f"{settings.ollama_host}/api/chat",
+                    json=payload,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        content = data.get("message", {}).get("content", "")
+                        if isinstance(content, str) and content:
+                            yield content
+                    return
+        except httpx.TimeoutException as exc:
+            logger.error("Ollama streaming call timed out: %s", exc)
+            yield "Sorry, I took too long. Please try again."
+            return
+        except (httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            last_exc = exc
+            if attempt + 1 >= attempts:
+                break
+            logger.warning(
+                "Transient Ollama stream error (attempt %d/%d): %s",
+                attempt + 1,
+                attempts,
+                exc,
+            )
+            await asyncio.sleep(delay)
+            delay *= 2
+        except httpx.HTTPError as exc:
+            logger.error("Ollama streaming call failed: %s", exc)
+            yield "I'm unable to respond right now. Please try again in a moment."
+            return
+
+    logger.error("Ollama streaming failed after retries: %s", last_exc)
+    yield "I'm unable to respond right now. Please try again in a moment."

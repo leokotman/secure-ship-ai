@@ -5,6 +5,7 @@ Default: mock (console log). Real Twilio is used when TWILIO_ACCOUNT_SID is set 
 
 import logging
 import secrets
+import time
 
 from .config import settings
 
@@ -44,22 +45,50 @@ def _send_mock(phone: str, code: str) -> None:
 def _send_twilio(phone: str, code: str) -> None:
     try:
         from twilio.rest import Client  # type: ignore[import-not-found,import-untyped]
-
-        client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-        client.messages.create(
-            body=(
-                f"Your SecureShip verification code is {code}. "
-                f"It expires in {CODE_EXPIRY_MINUTES} minutes."
-            ),
-            from_=settings.twilio_phone_number,
-            to=phone,
-        )
-        if settings.sms_log_verification_code or settings.debug:
-            logger.info("SMS [Twilio] -> %s  sent code=%s", phone, code)
-            # Print to stdout so container logs always show the code in local/dev when enabled.
-            print(f"SMS [Twilio] -> {phone}  code={code}", flush=True)
-        else:
-            logger.info("SMS [Twilio] -> %s  sent code=<redacted>", phone)
     except ImportError:
         logger.warning("twilio package not installed — falling back to mock SMS")
         _send_mock(phone, code)
+        return
+
+    delay = 0.5
+    attempts = max(1, settings.twilio_max_retries)
+    last_exc: Exception | None = None
+
+    for attempt in range(attempts):
+        try:
+            client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+            client.messages.create(
+                body=(
+                    f"Your SecureShip verification code is {code}. "
+                    f"It expires in {CODE_EXPIRY_MINUTES} minutes."
+                ),
+                from_=settings.twilio_phone_number,
+                to=phone,
+            )
+            if settings.sms_log_verification_code or settings.debug:
+                logger.info("SMS [Twilio] -> %s  sent code=%s", phone, code)
+                print(f"SMS [Twilio] -> {phone}  code={code}", flush=True)
+            else:
+                logger.info("SMS [Twilio] -> %s  sent code=<redacted>", phone)
+            return
+        except Exception as exc:  # Twilio raises assorted API/connection errors
+            last_exc = exc
+            # Fail fast on auth errors (do not retry)
+            msg = str(exc).lower()
+            if "authenticate" in msg or "401" in msg or "unauthorized" in msg:
+                logger.error("Twilio auth failure — not retrying: %s", exc)
+                raise
+            if attempt + 1 >= attempts:
+                break
+            logger.warning(
+                "Transient Twilio error (attempt %d/%d): %s",
+                attempt + 1,
+                attempts,
+                exc,
+            )
+            time.sleep(delay)
+            delay *= 2
+
+    logger.error("Twilio SMS failed after retries: %s", last_exc)
+    if last_exc is not None:
+        raise last_exc

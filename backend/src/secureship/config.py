@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
 
+    # CORS — comma-separated origins (no wildcards in production)
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
+
+    # Rate limiting (/chat)
+    chat_rate_limit_per_minute: int = 30
+
     # Database
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/secureship"
@@ -32,6 +38,9 @@ class Settings(BaseSettings):
     # Ollama
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
+    ollama_timeout_seconds: float = 60.0
+    ollama_stream_timeout_seconds: float = 120.0
+    ollama_max_retries: int = 3
 
     # Twilio (2FA)
     twilio_account_sid: str = ""
@@ -39,12 +48,17 @@ class Settings(BaseSettings):
     twilio_phone_number: str = ""
     # Security: keep OTP values out of shared logs unless explicitly enabled
     sms_log_verification_code: bool = False
+    twilio_max_retries: int = 3
 
     # Auth0 (Admin)
     auth0_domain: str = ""
     auth0_client_id: str = ""
     auth0_client_secret: str = ""
     auth0_audience: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 settings = Settings()

@@ -2,9 +2,10 @@
 
 import uuid
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import Request
 
 from secureship.main import (
     ChatRequest,
@@ -15,6 +16,14 @@ from secureship.main import (
     verify_sms,
 )
 from secureship.session import Session, SessionManager, SessionState
+
+
+def _mock_request(ip: str = "127.0.0.1") -> MagicMock:
+    req = MagicMock(spec=Request)
+    req.client = MagicMock()
+    req.client.host = ip
+    req.headers = {}
+    return req
 
 
 async def _stream_only_state_event() -> AsyncGenerator[str, None]:
@@ -34,7 +43,7 @@ async def _mock_stream_chat_response(
 async def test_chat_does_not_restore_ephemeral_otp_states() -> None:
     """DB state code_sent/awaiting_code must not reactivate OTP UI on reload."""
     mgr = SessionManager()
-    session_id = "sess-1"
+    session_id = str(uuid.uuid4())
 
     with (
         patch("secureship.main.session_manager", mgr),
@@ -46,9 +55,10 @@ async def test_chat_does_not_restore_ephemeral_otp_states() -> None:
         patch("secureship.main.get_transcript", new=AsyncMock(return_value=[])),
         patch("secureship.main.update_session_state", new=AsyncMock()),
         patch("secureship.main.stream_chat_response", new=_mock_stream_chat_response),
+        patch("secureship.main.enforce_chat_rate_limit"),
     ):
-        request = ChatRequest(message="hi", session_id=session_id)
-        response = await chat(request)
+        body = ChatRequest(message="hi", session_id=session_id)
+        response = await chat(body, _mock_request())
 
         chunks = [chunk async for chunk in response.body_iterator]
         assert chunks == ['\x00{"s":"anonymous","sid":"sess-1"}']
@@ -62,7 +72,7 @@ async def test_chat_does_not_restore_ephemeral_otp_states() -> None:
 async def test_chat_restores_verified_state() -> None:
     """Durable non-ephemeral states are still restored from DB."""
     mgr = SessionManager()
-    session_id = "sess-verified"
+    session_id = str(uuid.uuid4())
     customer_id = uuid.uuid4()
 
     with (
@@ -81,9 +91,10 @@ async def test_chat_restores_verified_state() -> None:
         patch("secureship.main.get_transcript", new=AsyncMock(return_value=[])),
         patch("secureship.main.update_session_state", new=AsyncMock()),
         patch("secureship.main.stream_chat_response", new=_mock_stream_chat_response),
+        patch("secureship.main.enforce_chat_rate_limit"),
     ):
-        request = ChatRequest(message="status?", session_id=session_id)
-        response = await chat(request)
+        body = ChatRequest(message="status?", session_id=session_id)
+        response = await chat(body, _mock_request())
         _ = [chunk async for chunk in response.body_iterator]
 
         restored = mgr.get(session_id)
@@ -96,6 +107,7 @@ async def test_chat_restores_verified_state() -> None:
 @pytest.mark.asyncio
 async def test_get_session_masks_ephemeral_states() -> None:
     """Session hydration endpoint must never return OTP-only states on reload."""
+    session_id = str(uuid.uuid4())
     with (
         patch(
             "secureship.main.load_session_data",
@@ -112,7 +124,7 @@ async def test_get_session_masks_ephemeral_states() -> None:
             ),
         ),
     ):
-        response: SessionResponse = await get_session("sess-2")
+        response: SessionResponse = await get_session(session_id)
 
     assert response.state == SessionState.ANONYMOUS.value
     assert response.messages == [
@@ -124,7 +136,8 @@ async def test_get_session_masks_ephemeral_states() -> None:
 @pytest.mark.asyncio
 async def test_verify_sms_returns_conflict_when_no_active_code() -> None:
     """Missing active OTP should be a 409 response with a machine-readable reason."""
-    session = Session(session_id="sess-no-code")
+    session_id = str(uuid.uuid4())
+    session = Session(session_id=session_id)
     session.state = SessionState.CODE_SENT
 
     with (
@@ -141,7 +154,7 @@ async def test_verify_sms_returns_conflict_when_no_active_code() -> None:
         patch("secureship.main.update_session_state", new=AsyncMock()),
     ):
         response = await verify_sms(
-            VerifySmsRequest(session_id="sess-no-code", code="111111")
+            VerifySmsRequest(session_id=session_id, code="111111")
         )
 
     assert response.status_code == 409
@@ -154,7 +167,8 @@ async def test_verify_sms_returns_conflict_when_no_active_code() -> None:
 @pytest.mark.asyncio
 async def test_verify_sms_incorrect_code_returns_reason() -> None:
     """Incorrect code should return a 401 with reason for better UX messaging."""
-    session = Session(session_id="sess-incorrect")
+    session_id = str(uuid.uuid4())
+    session = Session(session_id=session_id)
     session.state = SessionState.AWAITING_CODE
 
     with (
@@ -166,7 +180,7 @@ async def test_verify_sms_incorrect_code_returns_reason() -> None:
         patch("secureship.main.update_session_state", new=AsyncMock()),
     ):
         response = await verify_sms(
-            VerifySmsRequest(session_id="sess-incorrect", code="000000")
+            VerifySmsRequest(session_id=session_id, code="000000")
         )
 
     assert response.status_code == 401

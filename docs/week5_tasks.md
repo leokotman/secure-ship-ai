@@ -43,30 +43,30 @@ Frontend: when assistant metadata has multiple shipments **and** text mentions e
 
 #### 2. **Rate Limiting & Input Validation** — `backend/src/secureship/main.py`
 
-- [ ] **Rate limiting** on `/chat` (`slowapi` or equivalent)
+- [x] **Rate limiting** on `/chat` (in-memory limiter)
   - 30 requests per minute per session (fallback to IP)
   - Return **429** + `Retry-After`
-- [ ] **Input validation:**
-  - Message length: max **5000** chars (align code + docs)
+- [x] **Input validation:**
+  - Message length: max **5000** chars
   - Session ID: UUID when provided
-  - Phone: E.164 on identity/SMS paths
+  - Phone: E.164 on identity path (`verify_identity`)
   - Reject empty messages
-  - SQLAlchemy parameterized queries (audit; no raw string SQL)
+  - SQLAlchemy parameterized queries (unchanged; audited via injection tests)
 
 #### 3. **Security Hardening**
 
-- [ ] **Prompt injection tests** — `backend/tests/test_prompt_injection.py`
+- [x] **Prompt injection tests** — `backend/tests/test_prompt_injection.py`
   - Tool-layer cases (verified gate, ignore instruction payloads)
   - Documented adversarial strings; LLM-live cases optional/manual if CI has no Ollama
-- [ ] **JWT:** keep verify-on-request; document SPA Auth0 + no backend refresh endpoint as the chosen model; expired-token tests stay green
-- [ ] **CORS:** env-driven `CORS_ORIGINS` (default localhost; document prod)
-- [ ] **Logging:** structured JSON (`structlog` or stdlib JSON); redact phone / session_id / tokens; [`docs/LOGGING.md`](LOGGING.md)
+- [x] **JWT:** verify-on-request; malformed tokens 401 before JWKS; expired-token tests green; SPA refresh deferred to docs
+- [x] **CORS:** env-driven `CORS_ORIGINS` (default localhost)
+- [x] **Logging:** structured JSON (`structlog`); redact phone / session_id / tokens; [`docs/LOGGING.md`](LOGGING.md)
 
 #### 4. **Error Handling & Graceful Degradation**
 
-- [ ] Ollama timeouts: clear user-facing copy (“Sorry, I took too long…”)
-- [ ] Light retry (≤3, exponential) for transient Ollama/Twilio failures; fail fast on auth errors
-- [ ] Never leak stack traces to the client
+- [x] Ollama timeouts: clear user-facing copy (“Sorry, I took too long…”)
+- [x] Light retry (≤3, exponential) for transient Ollama/Twilio failures; fail fast on auth errors
+- [x] Never leak stack traces to the client
 
 ### Frontend (Next.js/TypeScript)
 
@@ -174,12 +174,12 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 
 | Item | Status |
 |---|---|
-| Prompt injection hardening | [ ] Tool-layer tests + documented adversarial strings |
-| Rate limiting on `/chat` | [ ] 30/min, 429 + Retry-After |
-| Input validation | [ ] Message length, UUID session, E.164 phone |
+| Prompt injection hardening | [x] Tool-layer tests + documented adversarial strings |
+| Rate limiting on `/chat` | [x] 30/min, 429 + Retry-After |
+| Input validation | [x] Message length, UUID session, E.164 phone |
 | HTTPS enforcement | [ ] Document for production |
 | JWT refresh | [ ] N/A — SPA Auth0; document chosen model |
-| Logging & monitoring | [ ] structlog/JSON + redaction + LOGGING.md |
+| Logging & monitoring | [x] structlog/JSON + redaction + LOGGING.md |
 | Shipment UX (specific query) | [x] Two-tool tests/prompt done; [ ] frontend card filter |
 | API / Architecture / Deploy / Security / Runbook / Troubleshooting | [ ] Write docs pack |
 | CI | [x] Present — keep green |

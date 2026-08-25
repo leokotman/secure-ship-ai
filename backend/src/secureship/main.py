@@ -3,10 +3,10 @@
 import logging
 import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .admin import router as admin_router
 from .chat import stream_chat_response
@@ -17,11 +17,16 @@ from .database import (
     load_session_data,
     update_session_state,
 )
+from .logging_config import configure_logging
+from .rate_limit import RateLimiter, rate_limit_key
 from .session import SessionState, session_manager
 from .tools import execute_tool
+from .validation import is_uuid_string
 
-logging.basicConfig(level=logging.DEBUG)
-
+configure_logging(
+    json_logs=not settings.debug,
+    level=logging.DEBUG if settings.debug else logging.INFO,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +40,15 @@ _EPHEMERAL_OTP_STATES: set[str] = {
     SessionState.AWAITING_CODE.value,
 }
 
-# CORS middleware
+chat_rate_limiter = RateLimiter(
+    max_requests=settings.chat_rate_limit_per_minute,
+    window_seconds=60,
+)
+
+# CORS middleware — origins from CORS_ORIGINS env (comma-separated)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,8 +58,17 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     """Chat request payload."""
 
-    message: str = Field(..., min_length=1, max_length=4000)
+    message: str = Field(..., min_length=1, max_length=5000)
     session_id: str | None = None
+
+    @field_validator("session_id")
+    @classmethod
+    def session_id_must_be_uuid(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not is_uuid_string(v):
+            raise ValueError("session_id must be a valid UUID")
+        return v
 
 
 class VerifySmsRequest(BaseModel):
@@ -57,6 +76,13 @@ class VerifySmsRequest(BaseModel):
 
     session_id: str = Field(..., min_length=1)
     code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+    @field_validator("session_id")
+    @classmethod
+    def session_id_must_be_uuid(cls, v: str) -> str:
+        if not is_uuid_string(v):
+            raise ValueError("session_id must be a valid UUID")
+        return v
 
 
 class VerifySmsResponse(BaseModel):
@@ -72,6 +98,28 @@ def _normalize_rehydrated_state(state: str) -> str:
     return state
 
 
+def _client_ip_from_request(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
+
+
+def enforce_chat_rate_limit(session_id: str | None, client_ip: str) -> None:
+    """Raise HTTP 429 with Retry-After when the chat rate limit is exceeded."""
+    key = rate_limit_key(session_id, client_ip)
+    allowed, retry_after = chat_rate_limiter.check(key)
+    if not allowed:
+        logger.warning("Rate limit exceeded for %s", key.split(":", 1)[0])
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait and try again.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check endpoint."""
@@ -79,7 +127,10 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest) -> StreamingResponse:
+async def chat(
+    body: ChatRequest,
+    request: Request,
+) -> StreamingResponse:
     """Chat endpoint — streams Ollama response with tool-calling loop.
 
     Loads full conversation history from DB so the model has context for the
@@ -87,8 +138,12 @@ async def chat(request: ChatRequest) -> StreamingResponse:
 
     The final chunk in the stream is a null-byte prefixed JSON metadata event
     carrying the updated session state so the frontend can update its store.
+
+    Rate limit: configured requests/minute per session_id (fallback to client IP).
     """
-    session_id = request.session_id or str(uuid.uuid4())
+    enforce_chat_rate_limit(body.session_id, _client_ip_from_request(request))
+
+    session_id = body.session_id or str(uuid.uuid4())
     session = session_manager.get_or_create(session_id)
 
     # Restore durable state + case facts from DB (survives server restarts)
@@ -106,19 +161,17 @@ async def chat(request: ChatRequest) -> StreamingResponse:
             session.case_facts = db_case_facts
         session_manager.update(session)
     except Exception:
-        logger.exception(
-            "Failed to load session data from DB for session_id=%s", session_id
-        )
+        logger.exception("Failed to load session data from DB")
 
     # Persist user turn before streaming so DB has it even if the stream fails
     try:
         await append_chat_message(
             session_id=session_id,
             role="user",
-            content=request.message,
+            content=body.message,
         )
     except Exception:
-        logger.exception("Failed to persist user message for session_id=%s", session_id)
+        logger.exception("Failed to persist user message")
         raise HTTPException(
             status_code=503, detail="Chat service is temporarily unavailable"
         )
@@ -127,8 +180,8 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     try:
         messages = await get_transcript(session_id)
     except Exception:
-        logger.exception("Failed to load transcript for session_id=%s", session_id)
-        messages = [{"role": "user", "content": request.message}]
+        logger.exception("Failed to load transcript")
+        messages = [{"role": "user", "content": body.message}]
 
     async def generate():  # type: ignore[return]
         assistant_chunks: list[str] = []
@@ -150,10 +203,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                         content=assistant_message,
                     )
                 except Exception:
-                    logger.exception(
-                        "Failed to persist assistant message for session_id=%s",
-                        session_id,
-                    )
+                    logger.exception("Failed to persist assistant message")
             # Sync final session state + case facts to DB
             updated = session_manager.get(session_id) or session
             try:
@@ -164,9 +214,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                     updated.case_facts or None,
                 )
             except Exception:
-                logger.exception(
-                    "Failed to sync session state for session_id=%s", session_id
-                )
+                logger.exception("Failed to sync session state")
 
     response = StreamingResponse(generate(), media_type="text/event-stream")
     response.headers["x-session-id"] = session_id
@@ -195,6 +243,13 @@ async def get_session(
     This stops one verified customer from reading a different customer's
     transcript by guessing a session_id.
     """
+    if not is_uuid_string(session_id):
+        raise HTTPException(status_code=422, detail="session_id must be a valid UUID")
+    if requesting_session_id is not None and not is_uuid_string(requesting_session_id):
+        raise HTTPException(
+            status_code=422, detail="requesting_session_id must be a valid UUID"
+        )
+
     # Default: treat the caller as requesting their own session
     caller_id = requesting_session_id or session_id
 
@@ -245,10 +300,7 @@ async def verify_sms(request: VerifySmsRequest) -> VerifySmsResponse | JSONRespo
                 updated.customer_id,
             )
         except Exception:
-            logger.exception(
-                "Failed to sync session state after /verify-sms for session_id=%s",
-                request.session_id,
-            )
+            logger.exception("Failed to sync session state after /verify-sms")
 
     status = str(result.get("status", ""))
     reason: str | None = None
