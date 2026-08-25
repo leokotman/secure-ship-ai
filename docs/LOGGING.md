@@ -35,5 +35,7 @@ Logging is configured at app import via `configure_logging()` in `main.py`:
 
 ## Related
 
-- [SECURITY.md](SECURITY.md) — threat model (Week 5 docs pack)
+- [SECURITY.md](SECURITY.md) — threat model and gates
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — common failures
+- [DEPLOYMENT.md](DEPLOYMENT.md) — `DEBUG` and env configuration
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system overview

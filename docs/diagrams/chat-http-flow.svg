@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="480" viewBox="0 0 700 480" role="img" aria-labelledby="t">
+  <title id="t">Chat HTTP flow</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#334155"/>
+    </marker>
+  </defs>
+  <rect width="700" height="480" fill="#ffffff"/>
+
+  <rect x="20" y="16" width="90" height="32" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+  <text x="65" y="37" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#0f172a">Browser</text>
+  <rect x="150" y="16" width="100" height="32" rx="6" fill="#f8fafc" stroke="#334155"/>
+  <text x="200" y="37" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#0f172a">Next BFF</text>
+  <rect x="300" y="16" width="90" height="32" rx="6" fill="#fef3c7" stroke="#b45309"/>
+  <text x="345" y="37" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#0f172a">FastAPI</text>
+  <rect x="430" y="16" width="90" height="32" rx="6" fill="#f5f3ff" stroke="#6d28d9"/>
+  <text x="475" y="37" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#0f172a">Ollama</text>
+  <rect x="560" y="16" width="100" height="32" rx="6" fill="#ecfdf5" stroke="#047857"/>
+  <text x="610" y="37" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#0f172a">Postgres</text>
+
+  <line x1="65" y1="48" x2="65" y2="460" stroke="#cbd5e1" stroke-dasharray="3 4"/>
+  <line x1="200" y1="48" x2="200" y2="460" stroke="#cbd5e1" stroke-dasharray="3 4"/>
+  <line x1="345" y1="48" x2="345" y2="460" stroke="#cbd5e1" stroke-dasharray="3 4"/>
+  <line x1="475" y1="48" x2="475" y2="460" stroke="#cbd5e1" stroke-dasharray="3 4"/>
+  <line x1="610" y1="48" x2="610" y2="460" stroke="#cbd5e1" stroke-dasharray="3 4"/>
+
+  <line x1="65" y1="70" x2="200" y2="70" stroke="#334155" marker-end="url(#a)"/>
+  <text x="132" y="64" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">POST message</text>
+
+  <line x1="200" y1="100" x2="345" y2="100" stroke="#334155" marker-end="url(#a)"/>
+  <text x="272" y="94" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">proxy JSON</text>
+
+  <rect x="250" y="118" width="200" height="28" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="350" y="137" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#475569">rate limit + validate</text>
+
+  <line x1="345" y1="160" x2="610" y2="160" stroke="#334155" marker-end="url(#a)"/>
+  <text x="477" y="154" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">load session, append user msg</text>
+
+  <line x1="345" y1="190" x2="475" y2="190" stroke="#334155" marker-end="url(#a)"/>
+  <text x="410" y="184" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">messages + tools</text>
+
+  <rect x="300" y="210" width="320" height="120" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-dasharray="4 3"/>
+  <text x="312" y="228" font-family="system-ui,sans-serif" font-size="11" fill="#64748b">loop tool calls</text>
+  <line x1="475" y1="250" x2="345" y2="250" stroke="#334155" marker-end="url(#a)"/>
+  <text x="410" y="244" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">tool_call</text>
+  <line x1="345" y1="280" x2="610" y2="280" stroke="#334155" marker-end="url(#a)"/>
+  <text x="477" y="274" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">execute_tool (gated)</text>
+  <line x1="345" y1="310" x2="475" y2="310" stroke="#334155" marker-end="url(#a)"/>
+  <text x="410" y="304" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">tool result</text>
+
+  <line x1="475" y1="350" x2="345" y2="350" stroke="#334155" marker-end="url(#a)"/>
+  <text x="410" y="344" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">final text</text>
+
+  <line x1="345" y1="380" x2="610" y2="380" stroke="#334155" marker-end="url(#a)"/>
+  <text x="477" y="374" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">append assistant msg</text>
+
+  <line x1="345" y1="410" x2="200" y2="410" stroke="#334155" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="272" y="404" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">stream + metadata</text>
+
+  <line x1="200" y1="440" x2="65" y2="440" stroke="#334155" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="132" y="434" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#334155">same stream</text>
+</svg>

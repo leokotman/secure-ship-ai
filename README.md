@@ -78,11 +78,18 @@ See [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) and [docs/week5_tas
 
 | Doc | Purpose |
 |-----|---------|
-| [docs/week5_tasks.md](docs/week5_tasks.md) | Current week checklist (program finish) |
+| [docs/API.md](docs/API.md) | Endpoints, auth, rate limits → OpenAPI |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System, trust boundaries, data flow |
+| [docs/diagrams/](docs/diagrams/) | Mermaid: Compose, chat HTTP, tool gate, escalation |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | `make start`, Compose, env, CORS, HTTPS |
+| [docs/SECURITY.md](docs/SECURITY.md) | Gates, Auth0, injection, rate limit, risks |
+| [docs/RUNBOOK_NEW_TOOL.md](docs/RUNBOOK_NEW_TOOL.md) | Add a tool safely |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common failures |
+| [docs/LOGGING.md](docs/LOGGING.md) | Structured logs + redaction |
+| [docs/week5_tasks.md](docs/week5_tasks.md) | Program-finish checklist |
 | [docs/DEV_PLAN.md](docs/DEV_PLAN.md) | Week-by-week plan |
-| [CLAUDE.md](CLAUDE.md) | Architecture & conventions for AI-assisted work |
-| [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) | Known issues closed in Week 5 |
-| docs/API.md, ARCHITECTURE.md, DEPLOYMENT.md, SECURITY.md, … | Written during Week 5 docs pack |
+| [CLAUDE.md](CLAUDE.md) | Conventions for AI-assisted work |
+| [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) | Issue #1 resolved (card filter) |
 
 ## Key Commands
 

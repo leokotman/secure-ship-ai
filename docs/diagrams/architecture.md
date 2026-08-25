@@ -1,21 +1,12 @@
-# SecureShip Architecture
+# Diagrams — Compose & host layout
 
-```mermaid
-flowchart LR
-    browser[Browser UI]
-    next[Next.js App + BFF /api/chat]
-    api[FastAPI /chat]
-    db[(Postgres)]
-    ollama[Ollama on Host]
-
-    browser --> next
-    next --> api
-    api --> db
-    api --> ollama
-```
+![Compose and host layout](compose-layout.svg)
 
 ## Notes
 
-- Ollama runs on the macOS host and is reached from Docker containers through `host.docker.internal`.
-- The browser never calls FastAPI directly; it uses the Next.js BFF route.
-- FastAPI persists chat transcripts in Postgres keyed by `session_id`.
+- Ollama runs on the **host**, not in Compose (program stretch to containerize).
+- Backend Compose service sets `OLLAMA_HOST=http://host.docker.internal:11434`.
+- Frontend bind-mounts source for hot reload in local Compose; production images are separate (Week 5 DevOps).
+- Chat path: browser → Next BFF → FastAPI. Admin path: browser → FastAPI with Bearer token.
+
+See also [ARCHITECTURE.md](../ARCHITECTURE.md).

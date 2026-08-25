@@ -112,6 +112,8 @@ Frontend: when assistant metadata has multiple shipments **and** text mentions e
 | [LOGGING.md](LOGGING.md) | Structured logs, redaction |
 | Root [README.md](../README.md) | Team README — Ollama, `make start`, seed, Auth0 |
 
+**Status:** docs pack written (Week 5 Phase 3).
+
 ### DevOps & CI/CD
 
 **Already in place:** CI lint/type/test + Trivy; CD builds/pushes GHCR images.
@@ -148,8 +150,8 @@ See Manual Testing Guide below (two-tool expectations).
 
 Items required by the original program / DEV_PLAN that Week 5 still owns:
 
-- [ ] Accurate root README (Ollama runtime, not Anthropic chat)
-- [ ] Docs pack + regenerated diagrams
+- [x] Accurate root README (Ollama runtime, not Anthropic chat)
+- [x] Docs pack + regenerated diagrams
 - [x] Orval types wired where practical
 - [ ] Prod-capable frontend Dockerfile
 - [ ] Edge-case pass + demo script dry-run
@@ -177,11 +179,11 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 | Prompt injection hardening | [x] Tool-layer tests + documented adversarial strings |
 | Rate limiting on `/chat` | [x] 30/min, 429 + Retry-After |
 | Input validation | [x] Message length, UUID session, E.164 phone |
-| HTTPS enforcement | [ ] Document for production |
+| HTTPS enforcement | [x] Documented for production in DEPLOYMENT/SECURITY |
 | JWT refresh | [x] N/A — SPA Auth0; documented chosen model |
 | Logging & monitoring | [x] structlog/JSON + redaction + LOGGING.md |
 | Shipment UX (specific query) | [x] Two-tool tests/prompt done; [x] frontend card filter |
-| API / Architecture / Deploy / Security / Runbook / Troubleshooting | [ ] Write docs pack |
+| API / Architecture / Deploy / Security / Runbook / Troubleshooting | [x] Docs pack written |
 | CI | [x] Present — keep green |
 | CD | [x] Image push — [ ] Compose smoke docs, no fake cloud URLs |
 | Responsive / a11y / loading-error UX | [x] Frontend polish |
@@ -228,7 +230,7 @@ make stop
 - [x] Logs: no phones / session IDs / tokens in cleartext
 - [x] CORS env-driven
 - [x] a11y + responsive smoke
-- [ ] Docs pack complete; README accurate
+- [x] Docs pack complete; README accurate
 - [ ] CI green; Docker images build; Compose demo-ready
 
 ---
@@ -302,8 +304,8 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 
 ## Deployment Readiness
 
-- [ ] Security hardening in place (rate limit, validation, redacted logs, injection tests)
-- [ ] Docs + accurate README; mentor can run from README alone
+- [x] Security hardening in place (rate limit, validation, redacted logs, injection tests)
+- [x] Docs + accurate README; mentor can run from README alone
 - [ ] `make start` → seed → demo script works
 - [ ] CI green; images build; Compose smoke documented
 - [ ] Stretch goals explicitly deferred
