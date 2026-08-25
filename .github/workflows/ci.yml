@@ -67,7 +67,7 @@ jobs:
 
       - name: Run backend tests
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/secureship_test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/secureship_test
           JWT_SECRET: test-secret-key-for-ci
           AUTH0_DOMAIN: test-domain.auth0.com
           AUTH0_AUDIENCE: test-audience
