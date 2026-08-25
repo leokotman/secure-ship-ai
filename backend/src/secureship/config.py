@@ -22,6 +22,12 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/secureship"
     )
 
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Normalize database URL: convert psycopg2 to asyncpg for async context
+        if "psycopg2" in self.database_url:
+            self.database_url = self.database_url.replace("postgresql+psycopg2", "postgresql+asyncpg")
+
     # Ollama
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
