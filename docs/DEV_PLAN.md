@@ -31,8 +31,8 @@ NB: this dev_plan was written in the beginning of the project, based on the @doc
 - [ ] FastAPI server running locally on port 8000
 - [ ] CORS configured for localhost:3000 (frontend)
 - [ ] Basic `/chat` endpoint accepting POST messages
-- [ ] **Ollama integration** — backend calls `http://host.docker.internal:11434` (or `localhost:11434` outside Docker); model: `qwen3:8b` (fallback: `llama3.2:3b`)
-  - ⚠️ Current code uses the Anthropic Cloud API as temporary scaffolding — must be replaced with Ollama before Week 1 is considered complete
+- [x] **Ollama integration** — backend calls `http://host.docker.internal:11434` (or `localhost:11434` outside Docker); model: `qwen3:8b` (fallback: `llama3.2:3b`)
+  - Chat runtime is Ollama (not Anthropic). Claude Code is used only to *build* the app.
 - [ ] `.env` management (Ollama host URL, no cloud API keys for chat)
 - [ ] Health check endpoint (`/health`)
 - [x] `ChatSession` table created in Postgres with `transcript` JSONB column; every turn written immediately (wire this up while the flow is still simple — retrofitting is harder)
@@ -234,35 +234,38 @@ NB: this dev_plan was written in the beginning of the project, based on the @doc
 
 **Goal:** Security review, documentation, edge-case handling, and go-live readiness.
 
+**Authoritative checklist:** [week5_tasks.md](week5_tasks.md) (locked two-tool shipment design — do **not** add `tracking_number` to `lookup_shipments`).
+
 ### Security & Hardening
-- [ ] Prompt injection hardening: test Claude with adversarial inputs
+- [ ] Prompt injection hardening: tool-layer tests + adversarial strings (live Ollama optional/manual)
   - Verify bot doesn't leak data to unverified users even with special prompts
-  - Verify bot doesn't execute unauthorized tool calls
-- [ ] Rate limiting: `/chat` endpoint (prevent abuse)
-- [ ] Input validation: all user inputs sanitized
-- [ ] HTTPS enforcement (if deployed)
-- [ ] JWT token expiry / refresh handling
-- [ ] Logging & monitoring (basic: structured logs, no sensitive data)
-- [ ] SQL injection prevention (use parameterized queries, verify)
-- [ ] CORS hardening (restrict to deployed frontend URL)
+  - Verify unauthorized tool calls stay gated by `session.customer_id`
+- [ ] Rate limiting: `/chat` endpoint (30/min per session → 429 + Retry-After)
+- [ ] Input validation: message length, UUID session_id, E.164 phone
+- [ ] HTTPS enforcement (if deployed) — document
+- [ ] JWT: verify-on-request (SPA Auth0; no backend refresh endpoint — document chosen model)
+- [ ] Logging & monitoring (structured JSON, redact phone/session/tokens)
+- [ ] SQL injection prevention (parameterized queries — verify)
+- [ ] CORS hardening (env-driven `CORS_ORIGINS`)
 
 ### Documentation
-- [ ] API documentation (OpenAPI/Swagger)
-- [ ] Architecture diagram (system diagram: frontend → backend → Claude → tools → DB)
-- [ ] Deployment guide (how to run in Docker, environment setup)
-- [ ] Design decisions doc (why tool-calling, why SMS 2FA, why PostgreSQL, etc.)
-- [ ] Runbook: how to add a new tool, how to debug a Claude issue
+- [ ] API documentation (OpenAPI/Swagger + `docs/API.md`)
+- [ ] Architecture diagram (frontend → backend → Ollama → tools → DB)
+- [ ] Deployment guide (`make start`, Compose, env/secrets)
+- [ ] Security / troubleshooting / logging docs
+- [ ] Runbook: how to add a new tool safely
 
 ### Frontend Polish
+- [ ] Smart shipment card filtering (specific tracking → one card + Show all)
 - [ ] Responsive design (mobile, tablet, desktop)
 - [ ] Loading states, error handling, retry logic
 - [ ] Accessibility (WCAG 2.1 AA): alt text, keyboard nav, ARIA labels
-- [ ] Dark mode toggle (optional, nice-to-have)
+- [ ] Dark mode toggle (optional stretch — out of scope)
 
 ### Backend Polish
 - [ ] Error handling: graceful failures, user-facing error messages
-- [ ] Retry logic for external APIs (Twilio, Claude)
-- [ ] Request timeouts, circuit breakers
+- [ ] Retry logic for transient Ollama/Twilio failures (≤3)
+- [ ] Request timeouts; clear timeout copy for users
 
 ### DevOps
 - [ ] Docker Compose: single `docker-compose.yml` to run frontend + backend + database
@@ -355,18 +358,19 @@ Mentors provide feedback, flag rework if needed, unblock if stuck.
 
 | Issue | Mitigation |
 |-------|-----------|
-| Claude leaks data to unverified users | Prompt engineering: include explicit instruction to gate data. Test adversarially. |
+| Model leaks data to unverified users | Prompt + hard tool gate on `session.customer_id`. Test adversarially. |
 | SMS codes expire too fast | Use 10-minute expiry by default; configurable. |
 | Database migrations fail | Always test migrations locally before committing. Use Alembic's revision system. |
-| CORS errors during development | Correctly configure `allow_origins` in FastAPI CORS middleware. |
+| CORS errors during development | Correctly configure `allow_origins` / `CORS_ORIGINS` in FastAPI. |
 | Frontend loses session after refresh | Use localStorage to persist session ID; validate on app load. |
-| Tool-calling timeouts | Set reasonable timeouts on Claude API calls; gracefully degrade. |
+| Tool-calling timeouts | Set reasonable timeouts on Ollama calls; gracefully degrade. |
+| Specific shipment shows all cards | Two-tool path + frontend card filter (see WEEK4_KNOWN_ISSUES). |
 
 ---
 
 ## Resources & References
 
-- **Anthropic API Docs:** https://docs.anthropic.com
+- **Ollama:** https://ollama.com / https://github.com/ollama/ollama
 - **FastAPI:** https://fastapi.tiangolo.com
 - **Next.js:** https://nextjs.org
 - **SQLAlchemy:** https://www.sqlalchemy.org
@@ -380,10 +384,10 @@ Mentors provide feedback, flag rework if needed, unblock if stuck.
 
 This plan is a **living document**—adjust based on actual progress, team size, and blockers. If a week falls behind, the following week's scope can shift. The core milestones (identity verification, tool-calling, admin panel) are non-negotiable; stretch goals are flexible.
 
-The SecureShip project is deliberately a **conversational identity-gating problem**, not a CRUD app with a chatbot. Focus on making the identity flow conversational and natural, and on ensuring Claude's tool-calling is secure and guardrailed. That's the real learning.
+The SecureShip project is deliberately a **conversational identity-gating problem**, not a CRUD app with a chatbot. Focus on making the identity flow conversational and natural, and on ensuring Ollama tool-calling is secure and guardrailed. That's the real learning.
 
 ---
 
-**Version:** 1.0  
-**Last Updated:** 2025-07-27  
-**Next Review:** Monday, Week 2
+**Version:** 1.1  
+**Last Updated:** 2026-08-25  
+**Next Review:** Week 5 program finish — see [week5_tasks.md](week5_tasks.md)

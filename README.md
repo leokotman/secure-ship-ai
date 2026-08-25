@@ -1,22 +1,22 @@
 # SecureShip
 
-An AI-gated shipment support chat application built with:
-- **Backend:** Python (FastAPI), Claude Anthropic API
-- **Frontend:** Next.js, React, TypeScript
-- **Identity:** Conversational verification + SMS 2FA
-- **Tool-Calling:** Claude calls shipment lookup functions
+AI-gated shipment support chat. Customers verify identity conversationally (name + phone + SMS 2FA), then chat with a **local Ollama** model that tool-calls into Postgres — only for verified sessions. An Auth0-gated admin panel manages shipments.
+
+**Stack:**
+- **Backend:** Python (FastAPI), Ollama (`qwen3:8b`), Twilio (SMS 2FA), Auth0 (admin JWT), PostgreSQL
+- **Frontend:** Next.js, React, TypeScript (BFF proxies — browser never talks to the backend directly)
+- **Runtime note:** Claude / Anthropic is used only via Claude Code to *build* the app. The chat brain is Ollama, not a cloud LLM API.
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — must be running before any command below
-- [Ollama](https://ollama.com/) — must be running with the `qwen3:8b` model pulled.
-  Pull is a **one-time download**:
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — running before any command below
+- [Ollama](https://ollama.com/) — running with `qwen3:8b` pulled (one-time):
+
   ```bash
   ollama pull qwen3:8b
   ```
-  You only need to do this once. The model is stored locally and persists across restarts.
 
 ### Start the app
 
@@ -24,91 +24,97 @@ An AI-gated shipment support chat application built with:
 make start
 ```
 
-This starts Ollama (if not already running) and brings up the full Docker stack. If Ollama was already running you may see a harmless error in the background — ignore it.
+Starts Ollama (if needed) and the Docker stack (frontend, backend, Postgres).
 
-Frontend code changes are now picked up automatically by the Docker frontend service (Next.js dev mode + bind mount), so you do not need to rebuild containers for normal UI edits.
+- Frontend: http://localhost:3000  
+- Backend health: http://localhost:8000/health  
+- OpenAPI: http://localhost:8000/openapi.json  
 
-Visit **http://localhost:3000**
+Frontend bind-mount + Next.js dev mode: UI edits hot-reload without rebuilding containers.
 
-### Seed the database (first run only)
+### Seed the database (first run)
 
 ```bash
 make seed
 ```
 
-Run this once while the stack is up. It's idempotent — safe to run again.
+Idempotent — safe to re-run.
 
-### Stop the app
+### Stop
 
 ```bash
-make stop          # stop everything, keep your data
-make nuke          # stop everything AND wipe the database volume
+make stop          # keep data
+make nuke          # wipe DB volume
 ```
+
+## Setup Environment
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+Configure as needed:
+
+| Area | Vars |
+|------|------|
+| Ollama | `OLLAMA_HOST`, `OLLAMA_MODEL` (defaults work for local) |
+| Database | `DATABASE_URL` (Compose sets this for containers) |
+| SMS 2FA | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` (or use mock/log mode if enabled) |
+| Admin Auth0 | `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_AUDIENCE` (+ frontend Auth0 vars) |
+
+Never commit `.env` files.
+
+## Shipment lookups (two tools)
+
+| Tool | Use |
+|------|-----|
+| `lookup_shipments()` | All shipments for the verified `session.customer_id` |
+| `get_shipment_status(tracking_number)` | One ownership-scoped shipment |
+
+See [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) and [docs/week5_tasks.md](docs/week5_tasks.md).
 
 ## Documentation
 
-- **[DEV_PLAN.md](DEV_PLAN.md)** — Week-by-week development plan (5 weeks)
-- **[CLAUDE.md](CLAUDE.md)** — Architecture, structure, key patterns for AI-assisted development
+| Doc | Purpose |
+|-----|---------|
+| [docs/week5_tasks.md](docs/week5_tasks.md) | Current week checklist (program finish) |
+| [docs/DEV_PLAN.md](docs/DEV_PLAN.md) | Week-by-week plan |
+| [CLAUDE.md](CLAUDE.md) | Architecture & conventions for AI-assisted work |
+| [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) | Known issues closed in Week 5 |
+| docs/API.md, ARCHITECTURE.md, DEPLOYMENT.md, SECURITY.md, … | Written during Week 5 docs pack |
 
 ## Key Commands
 
 | Command | What it does |
-|---------|---|
-| `make install` | Install backend + frontend dependencies |
-| `make dev-backend` | Run FastAPI server (localhost:8000) |
-| `make dev-frontend` | Run Next.js dev server (localhost:3000) |
-| `make lint` | Run linters |
-| `make format` | Format code |
+|---------|--------------|
+| `make start` / `make stop` / `make nuke` | Compose stack lifecycle |
+| `make seed` | Seed customers + shipments |
+| `make install` | Install backend + frontend deps |
 | `make test` | Run tests |
-| `make clean` | Clean build artifacts |
+| `make lint` / `make format` | Lint / format |
 
-## Setup Environment
+Backend: `cd backend && make dev|test|lint`  
+Frontend: `cd frontend && make dev|lint` (and `npm test`, Orval generate when documented)
 
-1. Copy `.env` templates:
-   ```bash
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env
-   ```
+## Architecture (by week)
 
-2. Add your Anthropic API key to `backend/.env`:
-   ```
-   ANTHROPIC_API_KEY=your_key_here
-   ```
-
-3. (Week 2+) Add Twilio credentials:
-   ```
-   TWILIO_ACCOUNT_SID=...
-   TWILIO_AUTH_TOKEN=...
-   TWILIO_PHONE_NUMBER=...
-   ```
-
-4. (Week 4+) Add Auth0 credentials:
-   ```
-   AUTH0_DOMAIN=...
-   AUTH0_CLIENT_ID=...
-   AUTH0_CLIENT_SECRET=...
-   ```
-
-## Architecture
-
-**Week 1:** Basic chat skeleton + Claude integration  
-**Week 2:** Identity verification + SMS 2FA  
-**Week 3:** Tool-calling + shipment lookups + database  
-**Week 4:** Admin panel + Auth0 + CRUD operations  
-**Week 5:** Security hardening, docs, final polish  
-
-See [DEV_PLAN.md](DEV_PLAN.md) for detailed week-by-week breakdown.
+1. Chat skeleton + Ollama  
+2. Identity + SMS 2FA  
+3. Tool-calling + shipment DB  
+4. Admin panel + Auth0 + soft-delete  
+5. Hardening, docs, polish, demo readiness  
 
 ## Project Structure
 
 ```
 .
-├── backend/                # Python FastAPI server
-├── frontend/               # Next.js React app
-├── docs/                   # Documentation & assets
-├── DEV_PLAN.md             # Week-by-week plan
-├── CLAUDE.md               # Architecture guide
-└── README.md               # This file
+├── backend/          # FastAPI + tools + Auth0 admin API
+├── frontend/         # Next.js chat + admin UI
+├── docs/             # Plans, guides, diagrams
+├── docker-compose.yml
+├── CLAUDE.md
+└── README.md
 ```
 
 ## License
