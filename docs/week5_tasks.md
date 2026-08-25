@@ -32,12 +32,14 @@ Frontend: when assistant metadata has multiple shipments **and** text mentions e
 
 #### 1. **Shipment tools (two-tool path)** — `backend/src/secureship/tools.py`
 
-- [ ] Confirm/strengthen unit tests (do **not** add `tracking_number` to `lookup_shipments`):
+- [x] Confirm/strengthen unit tests (do **not** add `tracking_number` to `lookup_shipments`):
   - `test_lookup_shipments_returns_all_for_verified_customer` (already exists — keep green)
   - `test_get_shipment_status_returns_match_for_verified_customer`
   - `test_get_shipment_status_returns_not_found_when_missing`
   - Ownership gate: other customer’s tracking → not found / empty (no leak)
-- [ ] Tighten system prompt examples in `chat.py` with explicit **all vs specific** wording
+  - Schema contract: `lookup_shipments` has no `tracking_number` param
+- [x] Tighten system prompt examples in `chat.py` with explicit **all vs specific** wording
+- [x] Fix `_extract_tracking_number` for hyphenated codes (e.g. `ADMIN-TEST-002`)
 
 #### 2. **Rate Limiting & Input Validation** — `backend/src/secureship/main.py`
 
@@ -178,7 +180,7 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 | HTTPS enforcement | [ ] Document for production |
 | JWT refresh | [ ] N/A — SPA Auth0; document chosen model |
 | Logging & monitoring | [ ] structlog/JSON + redaction + LOGGING.md |
-| Shipment UX (specific query) | [ ] Two-tool tests/prompt + frontend card filter |
+| Shipment UX (specific query) | [x] Two-tool tests/prompt done; [ ] frontend card filter |
 | API / Architecture / Deploy / Security / Runbook / Troubleshooting | [ ] Write docs pack |
 | CI | [x] Present — keep green |
 | CD | [x] Image push — [ ] Compose smoke docs, no fake cloud URLs |

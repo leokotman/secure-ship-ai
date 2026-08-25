@@ -165,7 +165,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "get_shipment_status",
             "description": (
-                "Get a verified customer's shipment by tracking number. "
+                "Get one verified customer's shipment by tracking number. "
+                "Call this when the customer mentions a specific tracking number. "
                 "Uses server-side session identity and ignores any customer IDs."
             ),
             "parameters": {

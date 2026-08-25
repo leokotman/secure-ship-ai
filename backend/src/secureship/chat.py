@@ -58,9 +58,15 @@ State: {state}
   or type it in the chat.
 - After verification, acknowledge it and ask how you can help.
 - **When a verified customer asks about their shipments, YOU MUST ALWAYS CALL A TOOL FIRST:**
-    - If they ask without a specific tracking number, call `lookup_shipments` (no args).
-      It returns all their shipments; summarise the results in your reply.
-    - If they provide a tracking number, call `get_shipment_status` with that number.
+
+    ALL shipments (examples: "my orders", "all shipments", "what do I have?"):
+      → Call `lookup_shipments` with no args. It returns every shipment for this
+        customer; summarise them in your reply. Do NOT pass a tracking_number.
+
+    SPECIFIC shipment (customer mentions a tracking number):
+      → Extract the tracking number and call `get_shipment_status` with it.
+      → Focus your reply on that shipment only.
+
     - **CRITICAL: NEVER answer shipment questions from memory or prior context.**
       **You MUST call lookup_shipments or get_shipment_status EVERY SINGLE TIME**
       **a customer asks about their shipments, even if you think you already know.**
@@ -98,25 +104,30 @@ def _extract_tracking_number(text: str) -> str | None:
     """Extract tracking number from user message if present.
 
     Only matches realistic tracking number patterns:
-    - Starts with letters (2+) or starts with alphanumeric
-    - Has at least 8 characters total
-    - May contain hyphens
-    Examples: ADMIN-TEST-001, SS2608000057, 1Z999AA10123456784
+    - Hyphenated codes with digits (e.g. ADMIN-TEST-001)
+    - Letter+digit carrier-style codes (e.g. SS2608000057, 1Z…)
+    - Long numeric codes (FedEx/USPS-style)
     """
     import re
 
     text_clean = re.sub(r"[^\w\s-]", "", text.upper())  # Remove ? ! , . etc
-    # Match patterns like ADMIN-TEST-001, SS2608000057, but not random words
     patterns = [
-        r"\b([A-Z]{2,}[-][A-Z0-9]{3,}[0-9]{3,})\b",  # ADMIN-TEST-001 style
+        r"\b([A-Z]{2,}(?:-[A-Z0-9]{2,})+)\b",  # ADMIN-TEST-001 / ADMIN-TEST-002
         r"\b([A-Z]{2}\d{10,})\b",  # SS2608000057 style
         r"\b(1Z[0-9A-Z]{16})\b",  # UPS format
         r"\b(\d{12,})\b",  # FedEx/USPS numeric
     ]
     for pattern in patterns:
         match = re.search(pattern, text_clean)
-        if match:
-            return match.group(1)
+        if not match:
+            continue
+        candidate = match.group(1)
+        # Hyphenated tokens must include a digit (avoid phrase fragments)
+        if "-" in candidate and not any(c.isdigit() for c in candidate):
+            continue
+        if len(candidate) < 8:
+            continue
+        return candidate
     return None
 
 

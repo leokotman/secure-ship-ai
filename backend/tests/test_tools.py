@@ -8,6 +8,7 @@ import pytest
 
 from secureship.session import Session, SessionManager, SessionState
 from secureship.tools import (
+    TOOL_DEFINITIONS,
     _check_verification_code,
     _escalate_to_human,
     _get_shipment_details,
@@ -298,6 +299,27 @@ async def test_lookup_shipments_handles_lookup_errors(
     assert result == {"status": "unavailable", "shipments": []}
 
 
+def test_lookup_shipments_schema_has_no_tracking_number_parameter() -> None:
+    """Two-tool design: lookup_shipments is all-shipments only (no filter arg)."""
+    lookup = next(
+        t for t in TOOL_DEFINITIONS if t["function"]["name"] == "lookup_shipments"
+    )
+    props = lookup["function"]["parameters"].get("properties", {})
+    assert props == {}
+    assert "tracking_number" not in props
+    assert lookup["function"]["parameters"].get("required", []) == []
+
+
+def test_get_shipment_status_schema_requires_tracking_number() -> None:
+    """Specific lookups go through get_shipment_status(tracking_number)."""
+    status_tool = next(
+        t for t in TOOL_DEFINITIONS if t["function"]["name"] == "get_shipment_status"
+    )
+    props = status_tool["function"]["parameters"]["properties"]
+    assert "tracking_number" in props
+    assert status_tool["function"]["parameters"]["required"] == ["tracking_number"]
+
+
 # ── get_shipment_details tool ─────────────────────────────────────────────────
 
 
@@ -419,6 +441,56 @@ async def test_get_shipment_status_returns_not_found_when_missing(
 
     assert result == {"status": "not_found", "shipment": None}
     mock_load.assert_awaited_once_with(verified_session.customer_id, "NOPE-1")
+
+
+@pytest.mark.asyncio
+async def test_get_shipment_status_empty_tracking_returns_missing(
+    verified_session: Session,
+) -> None:
+    """Blank tracking numbers fail closed without a DB lookup."""
+    with patch(
+        "secureship.tools._load_shipment_for_customer_and_tracking",
+        new_callable=AsyncMock,
+    ) as mock_load:
+        result = await _get_shipment_status(verified_session, "   ")
+
+    assert result == {"status": "missing_tracking_number", "shipment": None}
+    mock_load.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_shipment_status_handles_lookup_errors(
+    verified_session: Session,
+) -> None:
+    """DB failures convert to safe tool output instead of exceptions."""
+    with patch(
+        "secureship.tools._load_shipment_for_customer_and_tracking",
+        new_callable=AsyncMock,
+    ) as mock_load:
+        mock_load.side_effect = RuntimeError("db temporarily unavailable")
+        result = await _get_shipment_status(verified_session, "SS2608000055")
+
+    assert result == {"status": "unavailable", "shipment": None}
+
+
+@pytest.mark.asyncio
+async def test_get_shipment_status_ownership_gated_returns_not_found(
+    verified_session: Session,
+) -> None:
+    """Another customer's tracking yields not_found (no ownership leak)."""
+    with patch(
+        "secureship.tools._load_shipment_for_customer_and_tracking",
+        new_callable=AsyncMock,
+    ) as mock_load:
+        # Loader applies customer_id WHERE — wrong owner looks like missing
+        mock_load.return_value = None
+        result = await _get_shipment_status(verified_session, "OTHER-CUST-001")
+
+    assert result == {"status": "not_found", "shipment": None}
+    mock_load.assert_awaited_once_with(
+        verified_session.customer_id,
+        "OTHER-CUST-001",
+    )
 
 
 # ── Cross-customer access and prompt injection security tests ─────────────────
