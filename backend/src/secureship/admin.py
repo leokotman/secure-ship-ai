@@ -570,21 +570,21 @@ async def get_dashboard(
 
 @router.get("/login")
 async def admin_login() -> dict[str, str]:
-    """Redirect to Auth0 Universal Login.
+    """Unused under the SPA Auth0 model.
 
-    In a production deployment, this would construct the Auth0 authorization URL
-    with proper redirect_uri, client_id, audience, scope, and state parameters,
-    then return a redirect response.
+    Admin auth is handled in the Next.js SPA:
+    - `/admin` → Auth0 Universal Login (implicit/token fragment) or JWT paste
+    - `/admin/callback` → stores `access_token` and routes to the dashboard
+    - API calls send `Authorization: Bearer <token>`; this backend verifies JWT
 
-    For this implementation, we return a placeholder indicating where the redirect
-    would point. The actual OAuth2 flow integration (with redirect handling) is
-    typically implemented in the frontend or a BFF layer.
+    This endpoint remains only as a documented placeholder (not used by the UI).
     """
-    # Placeholder: in a real implementation, you would redirect to:
-    # https://{AUTH0_DOMAIN}/authorize?response_type=code&client_id=...&redirect_uri=...&audience=...&scope=openid profile email
     return {
-        "message": "Redirect to Auth0 Universal Login",
-        "note": "In production, this endpoint would redirect to Auth0 authorization URL",
+        "message": "Unused — use frontend SPA Auth0 at /admin",
+        "note": (
+            "SecureShip uses frontend Auth0 + Bearer JWT verification. "
+            "Do not call this endpoint for login."
+        ),
     }
 
 
@@ -592,15 +592,10 @@ async def admin_login() -> dict[str, str]:
 async def admin_callback(
     code: str | None = Query(default=None, description="Authorization code from Auth0"),
 ) -> dict[str, str]:
-    """Handle Auth0 callback and exchange code for tokens.
+    """Unused under the SPA Auth0 model.
 
-    In a production deployment, this would:
-    1. Validate the code parameter
-    2. Exchange it for an access token via Auth0's /oauth/token endpoint
-    3. Set a secure session cookie or return the token to the frontend
-    4. Redirect to the admin dashboard
-
-    For this implementation, we return a placeholder response.
+    The SPA handles the Auth0 redirect at `/admin/callback` (token in URL hash).
+    This backend route is a placeholder only; token exchange is not implemented here.
     """
     if not code:
         raise HTTPException(
@@ -608,13 +603,11 @@ async def admin_callback(
             detail="Missing authorization code",
         )
 
-    # Placeholder: in a real implementation, you would:
-    # 1. POST to https://{AUTH0_DOMAIN}/oauth/token with code, client_id, client_secret,
-    #  redirect_uri
-    # 2. Get access_token, id_token, refresh_token
-    # 3. Set secure HTTP-only cookie or return token to frontend
     return {
-        "message": "Auth0 callback received",
+        "message": "Unused — SPA handles Auth0 callback at /admin/callback",
         "code": code[:10] + "...",  # truncated for security
-        "note": "In production, this would exchange the code for tokens and set session",
+        "note": (
+            "No server-side code exchange. Use frontend /admin/callback and "
+            "Bearer tokens on admin API routes."
+        ),
     }

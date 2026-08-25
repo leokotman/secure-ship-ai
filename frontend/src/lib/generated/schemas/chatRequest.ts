@@ -12,7 +12,7 @@ import type { ChatRequestSessionId } from "./chatRequestSessionId";
 export interface ChatRequest {
   /**
    * @minLength 1
-   * @maxLength 4000
+   * @maxLength 5000
    */
   message: string;
   session_id?: ChatRequestSessionId;

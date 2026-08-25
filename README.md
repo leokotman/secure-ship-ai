@@ -95,7 +95,16 @@ See [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) and [docs/week5_tas
 | `make lint` / `make format` | Lint / format |
 
 Backend: `cd backend && make dev|test|lint`  
-Frontend: `cd frontend && make dev|lint` (and `npm test`, Orval generate when documented)
+Frontend: `cd frontend && make dev|lint|test|generate`
+
+Regenerate Orval types from a running backend OpenAPI:
+
+```bash
+cd frontend && make generate
+# or: ORVAL_OPENAPI_TARGET=http://localhost:8000/openapi.json npm run generate
+```
+
+Chat BFF request types use generated `ChatRequest` from `src/lib/generated/schemas`. Browser traffic still goes through Next.js `/api/*` proxies — never call the backend directly from the client.
 
 ## Architecture (by week)
 

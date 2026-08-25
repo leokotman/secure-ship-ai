@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { getSession, streamChat } from "@/lib/api";
+import { ChatApiError, getSession, streamChat } from "@/lib/api";
 import type { ShipmentPayload } from "@/lib/api";
+import { filterShipmentsForDisplay } from "@/lib/shipmentCards";
 import { useSessionStore } from "@/stores/sessionStore";
 import { ShipmentDisplay } from "./ShipmentDisplay";
 import { VerificationFlow } from "./VerificationFlow";
@@ -11,8 +12,18 @@ interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  /** Shipment(s) attached when a shipment tool returned data this turn. */
+  /** Full shipment list from stream metadata for this turn. */
   shipments?: ShipmentPayload[];
+  /** Tool that produced shipment metadata (e.g. get_shipment_status). */
+  shipmentTool?: string;
+  /** User text that triggered this assistant turn (for card filtering). */
+  triggerUserText?: string;
+}
+
+interface ChatErrorState {
+  message: string;
+  retryable: boolean;
+  lastUserMessage?: string;
 }
 
 const ESCALATION_SCRIPT: Message[] = [
@@ -34,10 +45,15 @@ export function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ChatErrorState | null>(null);
   const [showEscalationScript, setShowEscalationScript] = useState(false);
+  const [modalDismissed, setModalDismissed] = useState(false);
+  const [showAllCardIds, setShowAllCardIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hydratedSessionRef = useRef<string | null>(null);
+  const sendLockRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,6 +62,13 @@ export function ChatWindow() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Re-show verification modal when chat re-enters code states.
+  useEffect(() => {
+    if (chatState === "code_sent" || chatState === "awaiting_code") {
+      setModalDismissed(false);
+    }
+  }, [chatState]);
 
   // Migrate away from stale localStorage sessions and recover tab-scoped session id.
   useEffect(() => {
@@ -123,7 +146,22 @@ export function ChatWindow() {
     }, delay);
   }, [chatState, firstName, showEscalationScript]);
 
-  const streamAssistantResponse = async (message: string) => {
+  const toChatError = (err: unknown, lastUserMessage?: string): ChatErrorState => {
+    if (err instanceof ChatApiError) {
+      return {
+        message: err.message,
+        retryable: err.retryable,
+        lastUserMessage: err.retryable ? lastUserMessage : undefined,
+      };
+    }
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { message, retryable: true, lastUserMessage };
+  };
+
+  const streamAssistantResponse = async (
+    message: string,
+    options?: { hideUserEcho?: boolean },
+  ) => {
     const botMessageId = `${Date.now()}-assistant`;
     let fullResponse = "";
 
@@ -140,7 +178,12 @@ export function ChatWindow() {
           }
           return [
             ...prev,
-            { id: botMessageId, role: "assistant", content: fullResponse },
+            {
+              id: botMessageId,
+              role: "assistant",
+              content: fullResponse,
+              triggerUserText: options?.hideUserEcho ? undefined : message,
+            },
           ];
         });
       },
@@ -154,75 +197,96 @@ export function ChatWindow() {
     }
     // Attach shipment cards to the bot message
     if (result.shipment) {
-      const { data } = result.shipment;
+      const { data, tool } = result.shipment;
+      // Prefer single-shipment metadata from get_shipment_status when present.
       const shipments: ShipmentPayload[] =
-        data.shipments ?? (data.shipment ? [data.shipment] : []);
+        data.shipment && tool === "get_shipment_status"
+          ? [data.shipment]
+          : (data.shipments ?? (data.shipment ? [data.shipment] : []));
       if (shipments.length > 0) {
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === botMessageId ? { ...msg, shipments } : msg,
+            msg.id === botMessageId
+              ? {
+                  ...msg,
+                  shipments,
+                  shipmentTool: tool,
+                  triggerUserText: message,
+                }
+              : msg,
           ),
         );
       }
     }
   };
 
-  const handleVerificationSuccess = async () => {
-    setChatState("verified");
+  const runSend = async (message: string, opts?: { hideUserEcho?: boolean }) => {
+    if (sendLockRef.current || isLoading) return;
+    sendLockRef.current = true;
     setIsLoading(true);
     setError(null);
 
     try {
-      await streamAssistantResponse(POST_VERIFY_PROMPT);
+      await streamAssistantResponse(message, opts);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      setError(message);
+      setError(toChatError(err, message));
     } finally {
       setIsLoading(false);
+      sendLockRef.current = false;
     }
+  };
+
+  const handleVerificationSuccess = async () => {
+    setChatState("verified");
+    await runSend(POST_VERIFY_PROMPT, { hideUserEcho: true });
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    const trimmed = input.trim();
+    if (!trimmed || sendLockRef.current || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: trimmed,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
-    setError(null);
+    await runSend(trimmed);
+  };
 
-    try {
-      await streamAssistantResponse(input);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleRetry = async () => {
+    if (!error?.retryable || !error.lastUserMessage) return;
+    const message = error.lastUserMessage;
+    setError(null);
+    await runSend(message, { hideUserEcho: true });
   };
 
   const isEscalated = chatState === "escalated_to_human";
   // Show modal only if we're waiting for code AND not yet verified
   // Modal will auto-close when chatState changes to 'verified' (via chat or modal submission)
-  const showModal = chatState === "code_sent" || chatState === "awaiting_code";
+  const showModal =
+    !modalDismissed &&
+    (chatState === "code_sent" || chatState === "awaiting_code");
 
   return (
     <div
-      className={`flex flex-col h-screen transition-colors duration-700 ${
+      className={`flex flex-col h-screen min-h-0 transition-colors duration-700 ${
         isEscalated ? "bg-emerald-50" : "bg-gray-100"
       }`}
     >
       {/* Verification modal — rendered on demand, not on load */}
-      {showModal && <VerificationFlow onVerified={handleVerificationSuccess} />}
+      {showModal && (
+        <VerificationFlow
+          onVerified={handleVerificationSuccess}
+          onDismiss={() => setModalDismissed(true)}
+        />
+      )}
 
       {/* Header */}
-      <div
+      <header
         className={`border-b p-4 shadow-sm transition-colors duration-700 ${
           isEscalated
             ? "bg-emerald-600 border-emerald-700"
@@ -230,7 +294,7 @@ export function ChatWindow() {
         }`}
       >
         <h1
-          className={`text-2xl font-bold ${
+          className={`text-xl sm:text-2xl font-bold ${
             isEscalated ? "text-white" : "text-gray-900"
           }`}
         >
@@ -245,13 +309,18 @@ export function ChatWindow() {
             ? "You are connected to a human agent"
             : "Chat with our support bot to check your shipments"}
         </p>
-      </div>
+      </header>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      >
         {messages.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center">
+            <div className="text-center px-4">
               <p className="text-gray-500 text-lg">
                 Start a conversation with SecureShip
               </p>
@@ -263,49 +332,93 @@ export function ChatWindow() {
           </div>
         )}
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${
-              msg.role === "user"
-                ? "justify-end"
-                : msg.role === "system"
-                  ? "justify-center"
-                  : "justify-start"
-            }`}
-          >
-            {msg.role === "system" ? (
-              <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2 rounded-full text-sm">
-                {msg.content}
-              </div>
-            ) : (
-              <div
-                className={`max-w-xs px-4 py-2 rounded-lg ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : isEscalated
-                      ? "bg-emerald-700 text-white border border-emerald-600"
-                      : "bg-white text-gray-900 border border-gray-200"
-                }`}
-              >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+        {messages.map((msg) => {
+          const cardFilter =
+            msg.shipments && msg.shipments.length > 0
+              ? filterShipmentsForDisplay({
+                  shipments: msg.shipments,
+                  tool: msg.shipmentTool,
+                  userText: msg.triggerUserText,
+                  assistantText: msg.content,
+                })
+              : null;
+          const showAll = showAllCardIds.has(msg.id);
+          const visibleShipments =
+            cardFilter == null
+              ? []
+              : showAll
+                ? msg.shipments!
+                : cardFilter.visible;
+          const showFilterChrome =
+            cardFilter?.isFiltered === true && !showAll;
+
+          return (
+            <div
+              key={msg.id}
+              className={`flex ${
+                msg.role === "user"
+                  ? "justify-end"
+                  : msg.role === "system"
+                    ? "justify-center"
+                    : "justify-start"
+              }`}
+            >
+              {msg.role === "system" ? (
+                <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2 rounded-full text-sm max-w-[90%]">
                   {msg.content}
-                </p>
-                {msg.shipments && msg.shipments.length > 0 && (
-                  <div className="space-y-2">
-                    {msg.shipments.map((s) => (
-                      <ShipmentDisplay key={s.id} shipment={s} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+                </div>
+              ) : (
+                <div
+                  className={`w-full max-w-[min(100%,24rem)] sm:max-w-md px-4 py-2 rounded-lg ${
+                    msg.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : isEscalated
+                        ? "bg-emerald-700 text-white border border-emerald-600"
+                        : "bg-white text-gray-900 border border-gray-200"
+                  }`}
+                >
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </p>
+                  {visibleShipments.length > 0 && (
+                    <div className="mt-2 space-y-2 min-w-0">
+                      {showFilterChrome && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                          <span>
+                            Showing 1 of {cardFilter!.total}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowAllCardIds((prev) => {
+                                const next = new Set(prev);
+                                next.add(msg.id);
+                                return next;
+                              })
+                            }
+                            className="min-h-[44px] min-w-[44px] px-3 py-2 rounded-md border border-gray-300 bg-gray-50 text-gray-800 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            Show all
+                          </button>
+                        </div>
+                      )}
+                      {visibleShipments.map((s) => (
+                        <ShipmentDisplay key={s.id} shipment={s} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-white text-gray-900 border border-gray-200 px-4 py-2 rounded-lg">
+          <div className="flex justify-start" aria-live="polite" aria-busy="true">
+            <div
+              className="bg-white text-gray-900 border border-gray-200 px-4 py-2 rounded-lg"
+              role="status"
+            >
               <p className="text-sm text-gray-600 animate-pulse">
                 {isEscalated ? "Melany is typing…" : "SecureShip is thinking…"}
               </p>
@@ -314,9 +427,28 @@ export function ChatWindow() {
         )}
 
         {error && (
-          <div className="flex justify-center">
-            <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-2 rounded-lg">
-              <p className="text-sm">{error}</p>
+          <div className="flex justify-center" role="alert">
+            <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg max-w-md w-full">
+              <p className="text-sm">{error.message}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {error.retryable && error.lastUserMessage && (
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    disabled={isLoading}
+                    className="min-h-[44px] px-4 py-2 text-sm font-medium rounded-md bg-red-700 text-white hover:bg-red-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="min-h-[44px] px-4 py-2 text-sm font-medium rounded-md border border-red-300 text-red-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -325,20 +457,30 @@ export function ChatWindow() {
       </div>
 
       {/* Input area */}
-      <div className="bg-white border-t border-gray-200 p-4 shadow-lg">
-        <form onSubmit={handleSendMessage} className="flex gap-2">
+      <div className="bg-white border-t border-gray-200 p-3 sm:p-4 shadow-lg">
+        <form
+          onSubmit={handleSendMessage}
+          className="flex gap-2 items-stretch"
+          aria-label="Send a chat message"
+        >
+          <label htmlFor="chat-message-input" className="sr-only">
+            Message
+          </label>
           <input
+            id="chat-message-input"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={isEscalated ? "Message Melany…" : "Type your message…"}
             disabled={isLoading}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            aria-disabled={isLoading}
+            className="flex-1 min-h-[44px] min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            aria-busy={isLoading}
+            className="min-h-[44px] min-w-[44px] px-5 sm:px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             Send
           </button>

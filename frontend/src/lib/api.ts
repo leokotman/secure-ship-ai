@@ -5,12 +5,11 @@
  * never reaches the browser.
  */
 
+import type { ChatRequest as GeneratedChatRequest } from "@/lib/generated/schemas";
 import type { ChatState } from "@/stores/sessionStore";
 
-export interface ChatRequest {
-  message: string;
-  session_id?: string;
-}
+/** BFF chat request — aligns with Orval `ChatRequest` (message + optional session). */
+export type ChatRequest = GeneratedChatRequest;
 
 export interface ShipmentPackage {
   description: string;
@@ -40,6 +39,30 @@ export interface StreamChatResult {
   };
 }
 
+export class ChatApiError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds?: number;
+  readonly retryable: boolean;
+
+  constructor(
+    message: string,
+    options: { status: number; retryAfterSeconds?: number; retryable?: boolean },
+  ) {
+    super(message);
+    this.name = "ChatApiError";
+    this.status = options.status;
+    this.retryAfterSeconds = options.retryAfterSeconds;
+    this.retryable =
+      options.retryable ?? (options.status >= 500 || options.status === 429);
+  }
+}
+
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number.parseInt(header, 10);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
 /**
  * Send a message to the chat endpoint and stream the response.
  *
@@ -53,19 +76,61 @@ export async function streamChat(
   request: ChatRequest,
   onChunk: (chunk: string) => void,
 ): Promise<StreamChatResult> {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new ChatApiError(
+      "Unable to reach SecureShip. Check your connection and try again.",
+      { status: 0, retryable: true },
+    );
+  }
 
   if (!response.ok) {
-    throw new Error(`Chat API error: ${response.statusText}`);
+    const retryAfterSeconds = parseRetryAfter(response.headers.get("Retry-After"));
+    let detail = "";
+    try {
+      const body = (await response.json()) as { error?: string; detail?: string };
+      detail = body.error || body.detail || "";
+    } catch {
+      // ignore non-JSON error bodies
+    }
+
+    if (response.status === 429) {
+      const wait = retryAfterSeconds ? ` Try again in ${retryAfterSeconds}s.` : "";
+      throw new ChatApiError(
+        `You're sending messages too quickly.${wait}`,
+        { status: 429, retryAfterSeconds, retryable: true },
+      );
+    }
+
+    if (response.status === 400) {
+      throw new ChatApiError(detail || "Invalid message. Please try again.", {
+        status: 400,
+        retryable: false,
+      });
+    }
+
+    throw new ChatApiError(
+      detail || "Chat service is temporarily unavailable. Please try again.",
+      {
+        status: response.status,
+        retryAfterSeconds,
+        retryable: response.status >= 500,
+      },
+    );
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error("Response body is not readable");
+    throw new ChatApiError("Response body is not readable", {
+      status: 502,
+      retryable: true,
+    });
   }
 
   const decoder = new TextDecoder();

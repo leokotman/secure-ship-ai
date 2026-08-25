@@ -10,7 +10,8 @@
     "test": "jest",
     "type-check": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
-    "orval": "orval"
+    "orval": "orval",
+    "generate": "orval"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.83.0",

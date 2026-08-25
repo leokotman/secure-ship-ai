@@ -2,20 +2,29 @@
  * Admin Dashboard
  *
  * Main admin interface for managing shipments and packages.
+ * Auth: SPA Auth0 (or JWT paste) — see /admin and /admin/callback.
+ * Backend GET /admin/login and /admin/callback are unused placeholders under this model.
  */
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { adminApi, Shipment, DashboardStats as Stats } from "../../lib/adminApi";
 import {
   DashboardHeader,
   DashboardStats,
   ShipmentsTable,
-  CreateShipmentForm,
-  PackageForm,
 } from "./components";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import ErrorAlert from "../../components/ErrorAlert";
+
+const CreateShipmentForm = dynamic(
+  () => import("./components/CreateShipmentForm"),
+  { ssr: false },
+);
+const PackageForm = dynamic(() => import("./components/PackageForm"), {
+  ssr: false,
+});
 
 export default function AdminDashboard() {
   const router = useRouter();

@@ -72,31 +72,31 @@ Frontend: when assistant metadata has multiple shipments **and** text mentions e
 
 #### 1. **Smart Shipment Card Filtering** — `frontend/src/components/ChatWindow.tsx`
 
-- [ ] If metadata has multiple shipments and response/user text mentions exactly one tracking → render that card only
-- [ ] Indicator: “Showing 1 of N” + **Show all** button
-- [ ] If 0 or 2+ trackings mentioned → show all
-- [ ] Prefer `get_shipment_status` single-shipment metadata over text parsing when available
-- [ ] Unit tests for the filter helper
+- [x] If metadata has multiple shipments and response/user text mentions exactly one tracking → render that card only
+- [x] Indicator: “Showing 1 of N” + **Show all** button
+- [x] If 0 or 2+ trackings mentioned → show all
+- [x] Prefer `get_shipment_status` single-shipment metadata over text parsing when available
+- [x] Unit tests for the filter helper
 
 #### 2. **UX / a11y / responsive**
 
-- [ ] Loading/typing indicator with `aria-live`; network/429 errors with retry; session-expiry messaging
-- [ ] Debounce/disable double-send
-- [ ] WCAG AA: semantic form/button, ARIA on input/send/spinner, Escape closes verification modal, contrast, ≥44px tap targets
-- [ ] Responsive chat/cards (no horizontal scroll at 375px)
-- [ ] Lazy-load admin via `next/dynamic` where it helps
+- [x] Loading/typing indicator with `aria-live`; network/429 errors with retry; session-expiry messaging
+- [x] Debounce/disable double-send
+- [x] WCAG AA: semantic form/button, ARIA on input/send/spinner, Escape closes verification modal, contrast, ≥44px tap targets
+- [x] Responsive chat/cards (no horizontal scroll at 375px)
+- [x] Lazy-load admin via `next/dynamic` where it helps
 
 #### 3. **Orval (program NFR)**
 
-- [ ] Regenerate from backend OpenAPI; wire typed client/types for BFF-facing contracts where practical
-- [ ] Prefer generated types over hand-rolled shapes; keep BFF proxies (browser must not call backend directly)
-- [ ] Document `npm run generate` (or Makefile target) in README / runbook
+- [x] Regenerate from backend OpenAPI; wire typed client/types for BFF-facing contracts where practical
+- [x] Prefer generated types over hand-rolled shapes; keep BFF proxies (browser must not call backend directly)
+- [x] Document `npm run generate` (or Makefile target) in README / runbook
 
 #### 4. **Auth0 admin path**
 
-- [ ] Keep SPA Auth0 + JWT paste fallback for local/demo
-- [ ] Ensure callback + dashboard auth gate work when env vars set
-- [ ] Document SPA model; clarify backend `/admin/login`/`/callback` placeholders are unused under SPA (or redirect to docs)
+- [x] Keep SPA Auth0 + JWT paste fallback for local/demo
+- [x] Ensure callback + dashboard auth gate work when env vars set
+- [x] Document SPA model; clarify backend `/admin/login`/`/callback` placeholders are unused under SPA (or redirect to docs)
 
 ### Documentation (program Phase 5 required)
 
@@ -150,10 +150,10 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 
 - [ ] Accurate root README (Ollama runtime, not Anthropic chat)
 - [ ] Docs pack + regenerated diagrams
-- [ ] Orval types wired where practical
+- [x] Orval types wired where practical
 - [ ] Prod-capable frontend Dockerfile
 - [ ] Edge-case pass + demo script dry-run
-- [ ] WEEK4 known-issue resolution note (this file + Issue #1 above)
+- [x] WEEK4 known-issue resolution note (this file + Issue #1 above)
 
 ---
 
@@ -178,14 +178,14 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 | Rate limiting on `/chat` | [x] 30/min, 429 + Retry-After |
 | Input validation | [x] Message length, UUID session, E.164 phone |
 | HTTPS enforcement | [ ] Document for production |
-| JWT refresh | [ ] N/A — SPA Auth0; document chosen model |
+| JWT refresh | [x] N/A — SPA Auth0; documented chosen model |
 | Logging & monitoring | [x] structlog/JSON + redaction + LOGGING.md |
-| Shipment UX (specific query) | [x] Two-tool tests/prompt done; [ ] frontend card filter |
+| Shipment UX (specific query) | [x] Two-tool tests/prompt done; [x] frontend card filter |
 | API / Architecture / Deploy / Security / Runbook / Troubleshooting | [ ] Write docs pack |
 | CI | [x] Present — keep green |
 | CD | [x] Image push — [ ] Compose smoke docs, no fake cloud URLs |
-| Responsive / a11y / loading-error UX | [ ] Frontend polish |
-| Orval | [ ] Regenerate + wire types |
+| Responsive / a11y / loading-error UX | [x] Frontend polish |
+| Orval | [x] Regenerate + wire types |
 | Customer signup/login | Rejected (no end-user accounts) |
 
 ---
@@ -218,16 +218,16 @@ make stop
 ## Validation Checklist
 
 - [ ] Two-tool path:
-  - [ ] `lookup_shipments` → all for verified customer
-  - [ ] `get_shipment_status(tracking)` → one / empty; ownership-gated
-  - [ ] Prompt instructs all vs specific correctly
-  - [ ] Frontend filters cards + Show all
-- [ ] Rate limit: ~30+/min → 429 + Retry-After
-- [ ] Validation: empty / >5000 / bad UUID / bad phone rejected
-- [ ] Prompt injection: tool gate holds; adversarial strings documented
-- [ ] Logs: no phones / session IDs / tokens in cleartext
-- [ ] CORS env-driven
-- [ ] a11y + responsive smoke
+  - [x] `lookup_shipments` → all for verified customer
+  - [x] `get_shipment_status(tracking)` → one / empty; ownership-gated
+  - [x] Prompt instructs all vs specific correctly
+  - [x] Frontend filters cards + Show all
+- [x] Rate limit: ~30+/min → 429 + Retry-After
+- [x] Validation: empty / >5000 / bad UUID / bad phone rejected
+- [x] Prompt injection: tool gate holds; adversarial strings documented
+- [x] Logs: no phones / session IDs / tokens in cleartext
+- [x] CORS env-driven
+- [x] a11y + responsive smoke
 - [ ] Docs pack complete; README accurate
 - [ ] CI green; Docker images build; Compose demo-ready
 

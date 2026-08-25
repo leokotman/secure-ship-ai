@@ -1,11 +1,14 @@
 /**
- * Simple Admin Auth Page
+ * Admin Auth Page (SPA Auth0 model)
  *
- * For Week 4 MVP: This page allows manual JWT token entry for testing.
- * In production, this would be replaced with proper Auth0 Universal Login flow.
+ * Primary path: Auth0 Universal Login → `/admin/callback` → dashboard.
+ * Fallback for local/demo: paste an Auth0 access token (API Test tab).
+ *
+ * Backend `GET /admin/login` and `GET /admin/callback` are unused placeholders;
+ * JWT verification happens on each admin API request.
  *
  * To get a test token:
- * 1. Go to your Auth0 Dashboard → Applications → APIs → Test tab
+ * 1. Auth0 Dashboard → Applications → APIs → Test tab
  * 2. Copy the test access token
  * 3. Paste it here
  */
@@ -129,9 +132,9 @@ export default function AdminAuthPage() {
 
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
           <p className="text-xs text-blue-800">
-            <strong>Note:</strong> This manual token entry is for Week 4 testing
-            only. In production, authentication flows through Auth0 Universal
-            Login with secure session management.
+            <strong>Note:</strong> Prefer Login with Auth0 when env vars are set.
+            Manual token paste is for local/demo only. Tokens are verified on
+            each admin API call (no backend refresh endpoint).
           </p>
         </div>
       </div>

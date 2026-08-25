@@ -34,9 +34,9 @@ export function ShipmentDisplay({ shipment }: ShipmentDisplayProps) {
     : null;
 
   return (
-    <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-sm">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs text-gray-500">
+    <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-sm min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="font-mono text-xs text-gray-500 truncate">
           {shipment.tracking_number}
         </span>
         <span

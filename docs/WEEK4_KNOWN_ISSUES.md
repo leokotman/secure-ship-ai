@@ -6,7 +6,7 @@ Issues found during Week 4 testing that Week 5 closes.
 
 ## Issue #1 — Specific shipment query dumps all cards
 
-**Status:** Resolving in Week 5 (two-tool + UI filter)
+**Status:** Resolved in Week 5 (two-tool + UI filter)
 
 **Symptom:** When a verified customer asks about one tracking number (e.g. “Tell me about ADMIN-TEST-002”), the UI often shows **every** shipment as cards.
 
@@ -24,8 +24,8 @@ Forced tool-calling in `chat.py` already routes by tracking extraction. Remainin
 
 **Week 5 fix:**
 
-- Backend: keep two-tool design; strengthen tests and prompt “all vs specific” wording.
-- Frontend: if metadata/response mentions exactly one tracking among many, show that card only + “Showing 1 of N” + “Show all”.
+- Backend: keep two-tool design; strengthen tests and prompt “all vs specific” wording. **Done.**
+- Frontend: if metadata/response mentions exactly one tracking among many, show that card only + “Showing 1 of N” + “Show all”. **Done** (`filterShipmentsForDisplay` + ChatWindow).
 
 **Not doing:** Adding `tracking_number` to `lookup_shipments`.
 

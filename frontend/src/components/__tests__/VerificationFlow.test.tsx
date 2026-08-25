@@ -206,4 +206,19 @@ describe("VerificationFlow", () => {
     // Button should be disabled while submitting
     expect(verifyButton).toBeDisabled();
   });
+
+  it("calls onDismiss when Escape is pressed", () => {
+    const onDismiss = jest.fn();
+    useSessionStore.setState({
+      sessionId: "sess-esc",
+      chatState: "awaiting_code",
+    });
+
+    render(
+      <VerificationFlow onVerified={jest.fn()} onDismiss={onDismiss} />,
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
 });

@@ -53,8 +53,18 @@ export default async function handler(
         statusText: upstreamResponse.statusText,
         body: errorText,
       });
+      const retryAfter = upstreamResponse.headers.get("Retry-After");
+      if (retryAfter) {
+        res.setHeader("Retry-After", retryAfter);
+      }
+      const errorMessage =
+        upstreamResponse.status === 429
+          ? "Rate limit exceeded. Please wait before sending another message."
+          : upstreamResponse.status === 400
+            ? "Invalid chat request."
+            : GENERIC_CHAT_ERROR;
       res.status(upstreamResponse.status).json({
-        error: GENERIC_CHAT_ERROR,
+        error: errorMessage,
       });
       return;
     }

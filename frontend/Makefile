@@ -1,4 +1,4 @@
-.PHONY: help install dev build lint test format clean
+.PHONY: help install dev build lint test format clean generate
 
 help:
 	@echo "SecureShip Frontend Commands"
@@ -9,6 +9,7 @@ help:
 	@echo "lint          - Run linters"
 	@echo "test          - Run tests"
 	@echo "format        - Format code"
+	@echo "generate      - Regenerate Orval types from backend OpenAPI"
 	@echo "clean         - Clean build artifacts"
 
 install:
@@ -31,6 +32,9 @@ test:
 
 format:
 	npm run format
+
+generate:
+	npm run generate
 
 clean:
 	rm -rf .next/ node_modules/

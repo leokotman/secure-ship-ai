@@ -189,7 +189,9 @@ describe("AdminDashboard", () => {
     const createButton = screen.getByRole("button", { name: /Create Shipment/i });
     fireEvent.click(createButton);
 
-    expect(screen.getByText(/Create New Shipment/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Create New Shipment/i),
+    ).toBeInTheDocument();
 
     // Click cancel button to hide (get the close X button)
     const closeButton = screen.getByText("✕");

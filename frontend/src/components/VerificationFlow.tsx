@@ -4,14 +4,17 @@ import { useSessionStore } from "@/stores/sessionStore";
 
 interface Props {
   onVerified: () => void;
+  /** Called when the user dismisses the modal (e.g. Escape). */
+  onDismiss?: () => void;
 }
 
-export function VerificationFlow({ onVerified }: Props) {
+export function VerificationFlow({ onVerified, onDismiss }: Props) {
   const { sessionId, setChatState, chatState } = useSessionStore();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // If state changes to verified (e.g., via chat), close modal automatically
   useEffect(() => {
@@ -24,6 +27,18 @@ export function VerificationFlow({ onVerified }: Props) {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Escape closes the verification modal
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onDismiss?.();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,8 +92,21 @@ export function VerificationFlow({ onVerified }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onDismiss?.();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="verification-title"
+        aria-describedby="verification-description"
+        className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4"
+      >
         <div className="text-center mb-6">
           <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg
@@ -86,6 +114,7 @@ export function VerificationFlow({ onVerified }: Props) {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -95,35 +124,55 @@ export function VerificationFlow({ onVerified }: Props) {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2
+            id="verification-title"
+            className="text-xl font-semibold text-gray-900"
+          >
             Enter verification code
           </h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <p
+            id="verification-description"
+            className="text-sm text-gray-500 mt-1"
+          >
             Check your phone for the 6-digit code we just sent.
           </p>
         </div>
 
         <form onSubmit={handleSubmit}>
+          <label htmlFor="sms-code-input" className="sr-only">
+            6-digit verification code
+          </label>
           <input
+            id="sms-code-input"
             ref={inputRef}
             type="text"
             inputMode="numeric"
+            autoComplete="one-time-code"
             value={code}
             onChange={handleCodeChange}
             placeholder="000000"
             maxLength={6}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "sms-code-error" : undefined}
             className="w-full text-center text-3xl font-mono tracking-widest border-2 border-gray-300 rounded-xl py-3 px-4 focus:outline-none focus:border-blue-500 transition-colors"
             disabled={isSubmitting}
           />
 
           {error && (
-            <p className="text-sm text-red-600 text-center mt-3">{error}</p>
+            <p
+              id="sms-code-error"
+              role="alert"
+              className="text-sm text-red-600 text-center mt-3"
+            >
+              {error}
+            </p>
           )}
 
           <button
             type="submit"
             disabled={code.length !== 6 || isSubmitting}
-            className="mt-4 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-xl py-3 transition-colors"
+            aria-busy={isSubmitting}
+            className="mt-4 w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-xl py-3 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             {isSubmitting ? "Verifying…" : "Verify"}
           </button>

@@ -1,17 +1,22 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { ChatWindow } from "@/components/ChatWindow";
+import { ChatApiError } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
 
 const mockGetSession = jest.fn();
 const mockStreamChat = jest.fn();
 const mockVerifySmsCode = jest.fn();
 
-jest.mock("@/lib/api", () => ({
-  getSession: (...args: unknown[]) => mockGetSession(...args),
-  streamChat: (...args: unknown[]) => mockStreamChat(...args),
-  verifySmsCode: (...args: unknown[]) => mockVerifySmsCode(...args),
-}));
+jest.mock("@/lib/api", () => {
+  const actual = jest.requireActual("@/lib/api") as typeof import("@/lib/api");
+  return {
+    ...actual,
+    getSession: (...args: unknown[]) => mockGetSession(...args),
+    streamChat: (...args: unknown[]) => mockStreamChat(...args),
+    verifySmsCode: (...args: unknown[]) => mockVerifySmsCode(...args),
+  };
+});
 
 describe("ChatWindow", () => {
   beforeEach(() => {
@@ -151,5 +156,97 @@ describe("ChatWindow", () => {
     await waitFor(() => {
       expect(screen.queryByPlaceholderText("000000")).not.toBeInTheDocument();
     });
+  });
+
+  it("filters shipment cards to one tracking and offers Show all", async () => {
+    useSessionStore.setState({
+      sessionId: "sess-cards",
+      chatState: "verified",
+      firstName: "Ada",
+    });
+
+    mockStreamChat.mockImplementation(
+      async (
+        _request: { message: string; session_id?: string },
+        onChunk: (chunk: string) => void,
+      ) => {
+        onChunk("ADMIN-TEST-002 is in transit.");
+        return {
+          sessionId: "sess-cards",
+          sessionState: "verified",
+          shipment: {
+            tool: "lookup_shipments",
+            data: {
+              shipments: [
+                {
+                  id: "s1",
+                  tracking_number: "ADMIN-TEST-001",
+                  status: "delivered",
+                  carrier: "SecureShip",
+                  origin: "A",
+                  destination: "B",
+                  estimated_delivery: null,
+                  last_update: null,
+                  packages: [],
+                },
+                {
+                  id: "s2",
+                  tracking_number: "ADMIN-TEST-002",
+                  status: "in_transit",
+                  carrier: "SecureShip",
+                  origin: "A",
+                  destination: "B",
+                  estimated_delivery: null,
+                  last_update: null,
+                  packages: [],
+                },
+              ],
+            },
+          },
+        };
+      },
+    );
+
+    render(<ChatWindow />);
+
+    const input = screen.getByPlaceholderText("Type your message…");
+    fireEvent.change(input, { target: { value: "Tell me about ADMIN-TEST-002" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(/Showing 1 of 2/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show all" })).toBeInTheDocument();
+    expect(screen.getByText("ADMIN-TEST-002")).toBeInTheDocument();
+    expect(screen.queryByText("ADMIN-TEST-001")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(await screen.findByText("ADMIN-TEST-001")).toBeInTheDocument();
+    expect(screen.getByText("ADMIN-TEST-002")).toBeInTheDocument();
+  });
+
+  it("shows retry on rate-limit errors", async () => {
+    useSessionStore.setState({
+      sessionId: "sess-429",
+      chatState: "anonymous",
+      firstName: null,
+    });
+
+    mockStreamChat.mockRejectedValue(
+      new ChatApiError("You're sending messages too quickly. Try again in 30s.", {
+        status: 429,
+        retryAfterSeconds: 30,
+        retryable: true,
+      }),
+    );
+
+    render(<ChatWindow />);
+
+    const input = screen.getByPlaceholderText("Type your message…");
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText(/sending messages too quickly/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 });
