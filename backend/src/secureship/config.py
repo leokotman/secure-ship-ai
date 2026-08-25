@@ -1,5 +1,6 @@
 """Configuration management."""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,11 +23,11 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/secureship"
     )
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        # Normalize database URL: convert psycopg2 to asyncpg for async context
-        if "psycopg2" in self.database_url:
-            self.database_url = self.database_url.replace("postgresql+psycopg2", "postgresql+asyncpg")
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        # Convert psycopg2 (sync driver) to asyncpg (async driver) for SQLAlchemy
+        return v.replace("postgresql+psycopg2", "postgresql+asyncpg")
 
     # Ollama
     ollama_host: str = "http://localhost:11434"
