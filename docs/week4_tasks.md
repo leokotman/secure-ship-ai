@@ -36,7 +36,7 @@ Neither `auth.py` nor `admin.py` exist yet in `backend/src/secureship/`; both ar
   - ✅ Comprehensive test suite: `backend/tests/test_soft_delete.py`
   - ✅ Documentation: `docs/SOFT_DELETE_IMPLEMENTATION.md`
 
-- [ ] **Test: Admin Endpoint Authorization**
+- [x] **Test: Admin Endpoint Authorization**
   - No token / invalid token / expired token → 401 on every `/admin/*` route
   - Valid admin token → CRUD succeeds
   - Regression check: customer chat tools still only return non-deleted, `customer_id`-scoped shipments (existing Week 3 tests must keep passing)
@@ -110,13 +110,13 @@ make stop
 
 ## Validation Checklist
 
-- [ ] `/admin/*` routes reject requests with no token, invalid token, or expired token (401)
-- [ ] Admin can log in via Auth0 Universal Login and reach `/admin` dashboard
-- [ ] Admin creates a shipment → appears in `GET /admin/shipments`
-- [ ] Admin updates shipment status → change reflected immediately
-- [ ] Admin soft-deletes a shipment → disappears from `/admin/shipments` list (or shown as deleted) AND from customer's `lookup_shipments` result
-- [ ] Admin adds a package to a shipment → package appears when a verified customer asks about that shipment
-- [ ] Verified customer chat session sees a newly admin-created shipment without backend restart
+- [x] `/admin/*` routes reject requests with no token, invalid token, or expired token (401)
+- [x] Admin can log in via Auth0 Universal Login and reach `/admin` dashboard
+- [x] Admin creates a shipment → appears in `GET /admin/shipments`
+- [x] Admin updates shipment status → change reflected immediately
+- [x] Admin soft-deletes a shipment → disappears from `/admin/shipments` list (or shown as deleted) AND from customer's `lookup_shipments` result
+- [x] Admin adds a package to a shipment → package appears when a verified customer asks about that shipment
+- [x] Verified customer chat session sees a newly admin-created shipment without backend restart
 - [ ] `cd backend && make lint` passes
 - [ ] `cd backend && make test` passes (including new admin auth + soft-delete tests)
 - [ ] `cd frontend && make lint` passes
