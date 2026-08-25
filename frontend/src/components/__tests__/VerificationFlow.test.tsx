@@ -195,7 +195,7 @@ describe("VerificationFlow", () => {
       }), 100))
     );
 
-    render(<VerificationFlow onVerificationComplete={jest.fn()} />);
+    render(<VerificationFlow onVerified={jest.fn()} />);
     
     const input = screen.getByPlaceholderText(/000000/i);
     fireEvent.change(input, { target: { value: "123456" } });

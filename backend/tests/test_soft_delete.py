@@ -8,6 +8,7 @@ contains only the core security test. Additional validation of database
 integrity and admin API behavior is covered through manual testing.
 """
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -19,6 +20,10 @@ from secureship.session import Session, SessionState
 from secureship.tools import _lookup_shipments
 
 
+@pytest.mark.skipif(
+    not os.getenv("DATABASE_URL"),
+    reason="Requires DATABASE_URL to connect to live PostgreSQL database"
+)
 @pytest.mark.asyncio
 async def test_lookup_shipments_excludes_deleted() -> None:
     """Verify that lookup_shipments filters out soft-deleted shipments.
