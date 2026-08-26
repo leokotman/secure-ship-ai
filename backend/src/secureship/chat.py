@@ -93,8 +93,17 @@ def _build_system_prompt(session: Session) -> str:
         case_facts_block = json.dumps(session.case_facts, indent=2)
     else:
         case_facts_block = "(none yet)"
+    state_label = session.state.value
+    if (
+        session.has_shipment_access
+        and session.state == SessionState.ESCALATED_TO_HUMAN
+    ):
+        state_label = (
+            "escalated_to_human (customer verified — same shipment access rules apply)"
+        )
+
     return _SYSTEM_PROMPT_TEMPLATE.format(
-        state=session.state.value,
+        state=state_label,
         name_hint=name_hint,
         case_facts_block=case_facts_block,
     )
@@ -205,7 +214,7 @@ async def stream_chat_response(
             # ENFORCEMENT: If verified customer asked about shipments but LLM didn't call a tool,
             # force the tool call to ensure fresh data
             # Check on ANY round (not just round 0) because verification may take multiple rounds
-            if session.state == SessionState.VERIFIED:
+            if session.has_shipment_access:
                 last_user_msg = next(
                     (
                         m.get("content", "")

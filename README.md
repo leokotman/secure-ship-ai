@@ -30,7 +30,7 @@ Starts Ollama (if needed) and the Docker stack (frontend, backend, Postgres) wit
 - Backend health: http://localhost:8000/health  
 - OpenAPI: http://localhost:8000/openapi.json  
 
-Production-like images (no bind mounts): `make start-prod` (bakes Auth0 from `frontend/.env`). GHCR pull: set `SECURESHIP_*_IMAGE` in `.env` → `make pull-prod && make start-prod-no-build`. Smoke after the stack is up: `make smoke`.
+Production-like images (no bind mounts): `make start-prod` (bakes Auth0 from `frontend/.env`). GHCR pull: set `SECURESHIP_*_IMAGE` in `.env` → `make pull-prod && make start-prod-no-build`. Smoke after the stack is up: `make smoke`. Phase 5 edge-case dry-run: `make demo`.
 
 ### Seed the database (first run)
 
@@ -88,6 +88,7 @@ See [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) and [docs/week5_tas
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common failures |
 | [docs/LOGGING.md](docs/LOGGING.md) | Structured logs + redaction |
 | [docs/week5_tasks.md](docs/week5_tasks.md) | Program-finish checklist |
+| [docs/PROGRAM_COMPLETION.md](docs/PROGRAM_COMPLETION.md) | Audit vs original 5-week program |
 | [docs/DEV_PLAN.md](docs/DEV_PLAN.md) | Week-by-week plan |
 | [CLAUDE.md](CLAUDE.md) | Conventions for AI-assisted work |
 | [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) | Issue #1 resolved (card filter) |
@@ -99,6 +100,7 @@ See [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) and [docs/week5_tas
 | `make start` / `make start-prod` / `make pull-prod` / `make start-prod-no-build` / `make stop` / `make nuke` | Compose stack lifecycle (dev vs production-like vs GHCR pull) |
 | `make seed` | Seed customers + shipments |
 | `make smoke` | Health + chat validation + admin 401 |
+| `make demo` | Phase 5 edge-case HTTP dry-run (stack up) |
 | `make install` | Install backend + frontend deps |
 | `make test` | Backend + frontend tests |
 | `make lint` / `make format` | Lint / format |

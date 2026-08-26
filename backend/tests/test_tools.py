@@ -235,6 +235,43 @@ def test_escalate_from_verified_preserves_first_name(verified_session: Session) 
     assert verified_session.state == SessionState.ESCALATED_TO_HUMAN
 
 
+@pytest.mark.asyncio
+async def test_escalated_verified_customer_retains_shipment_access(
+    verified_session: Session,
+) -> None:
+    """Epic G: verified users who escalate keep shipment tool access (not a backdoor)."""
+    _escalate_to_human(verified_session)
+    assert verified_session.verified is False
+    assert verified_session.has_shipment_access is True
+
+    shipments = [{"id": "s1", "tracking_number": "SS2508000001", "status": "in_transit"}]
+    with patch(
+        "secureship.tools._load_all_shipments_for_customer", new_callable=AsyncMock
+    ) as mock_load:
+        mock_load.return_value = shipments
+        result = await _lookup_shipments(verified_session)
+
+    assert result == {"status": "ok", "shipments": shipments}
+    mock_load.assert_awaited_once_with(verified_session.customer_id)
+
+
+@pytest.mark.asyncio
+async def test_escalated_anonymous_cannot_access_shipments(
+    anonymous_session: Session,
+) -> None:
+    """Epic G4: anonymous escalation theater must not unlock shipment data."""
+    anonymous_session.first_name = "Guest"
+    _escalate_to_human(anonymous_session)
+
+    with patch(
+        "secureship.tools._load_all_shipments_for_customer", new_callable=AsyncMock
+    ) as mock_load:
+        result = await _lookup_shipments(anonymous_session)
+
+    assert result == {"status": "not_verified", "shipments": []}
+    mock_load.assert_not_awaited()
+
+
 # ── lookup_shipments tool ─────────────────────────────────────────────────────
 
 

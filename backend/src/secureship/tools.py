@@ -404,7 +404,7 @@ async def _lookup_shipments(session: Session) -> dict[str, Any]:
         session.verified,
         session.customer_id,
     )
-    if not session.verified or session.customer_id is None:
+    if not session.has_shipment_access:
         return {"status": "not_verified", "shipments": []}
 
     try:
@@ -423,7 +423,7 @@ async def _lookup_shipments(session: Session) -> dict[str, Any]:
 
 async def _get_shipment_details(session: Session, shipment_id: str) -> dict[str, Any]:
     """Return full details for one shipment, ownership-checked against session."""
-    if not session.verified or session.customer_id is None:
+    if not session.has_shipment_access:
         return {"status": "not_verified", "shipment": None}
 
     try:
@@ -447,7 +447,7 @@ async def _get_shipment_status(
     session: Session, tracking_number: str
 ) -> dict[str, Any]:
     """Return one verified customer's shipment matched by tracking number."""
-    if not session.verified or session.customer_id is None:
+    if not session.has_shipment_access:
         return {"status": "not_verified", "shipment": None}
 
     normalized = tracking_number.strip()

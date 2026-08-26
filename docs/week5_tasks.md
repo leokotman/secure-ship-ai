@@ -1,6 +1,6 @@
 # Week 5 Tasks
 
-## Status: In Progress (Phase 4 complete — Phase 5 edge-case/demo remains)
+## Status: Complete (Phase 5 — edge-case pass + demo dry-run)
 
 Week 5 finishes SecureShip for the program deliverable: security hardening, polish, documentation, and DevOps readiness — while keeping the **two-tool** shipment design already in code.
 
@@ -12,10 +12,10 @@ Week 5 finishes SecureShip for the program deliverable: security hardening, poli
 | 1 | Backend hardening (tools, rate limit, validation, logging) | [x] Done |
 | 2 | Frontend polish (card filter, a11y, Orval, Auth0 SPA) | [x] Done |
 | 3 | Docs pack (API, ARCHITECTURE, DEPLOYMENT, SECURITY, …) | [x] Done |
-| 4 | DevOps / demo readiness (Docker, Makefile, CD, GHCR pull path) | [x] **Done** |
-| 5 | Edge-case pass + manual demo script dry-run | [ ] Remaining |
+| 4 | DevOps / demo readiness (Docker, Makefile, CD, GHCR pull path) | [x] Done |
+| 5 | Edge-case pass + manual demo script dry-run | [x] **Done** |
 
-**Phase 4 deliverables:** multi-stage frontend Dockerfile, `docker-compose.dev.yml`, `make start-prod` / `make pull-prod` / `make start-prod-no-build`, `make smoke`, GHCR `image:` overrides in Compose, Auth0 build-args wiring, Postgres localhost bind, CD without fake cloud URLs, deployment runbook in [DEPLOYMENT.md](DEPLOYMENT.md) + [CI_CD_SETUP.md](CI_CD_SETUP.md).
+**Phase 5 deliverables:** escalation edge-case fix (`has_shipment_access` preserves verified shipment access through human handoff); `backend/tests/test_chat_integration.py` (chat → forced tool → DB, mock Ollama); escalation + SMS edge tests in `test_tools.py`; `scripts/demo_edge_cases.sh` + `make demo`; [PROGRAM_COMPLETION.md](PROGRAM_COMPLETION.md) audit vs original program.
 
 Key UX issue (see [WEEK4_KNOWN_ISSUES.md](WEEK4_KNOWN_ISSUES.md) Issue #1): asking about a **specific** shipment still dumps all shipment cards in the UI. Week 5 closes that via tool/prompt alignment + frontend card filtering — **not** by adding `tracking_number` to `lookup_shipments`.
 
@@ -148,14 +148,14 @@ Frontend: when assistant metadata has multiple shipments **and** text mentions e
 #### Unit (Backend)
 
 - [x] Tool security gating / soft-delete / admin auth (prior weeks)
-- [ ] Two-tool ownership + all-vs-specific coverage strengthened
-- [ ] Input validation + rate limiting + prompt-injection tool-layer tests
+- [x] Two-tool ownership + all-vs-specific coverage strengthened
+- [x] Input validation + rate limiting + prompt-injection tool-layer tests
 
 #### Integration (Backend)
 
-- [ ] Chat → tool → DB happy path (mock Ollama if needed)
-- [ ] Admin soft-delete → customer cannot see (keep green)
-- [ ] Auth0 missing/invalid token → 401
+- [x] Chat → tool → DB happy path (mock Ollama — `test_chat_integration.py`)
+- [x] Admin soft-delete → customer cannot see (keep green)
+- [x] Auth0 missing/invalid token → 401
 
 #### Manual
 
@@ -171,7 +171,7 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 - [x] Docs pack + regenerated diagrams
 - [x] Orval types wired where practical
 - [x] Prod-capable frontend Dockerfile
-- [ ] Edge-case pass + demo script dry-run
+- [x] Edge-case pass + demo script dry-run (`make demo`)
 - [x] WEEK4 known-issue resolution note (this file + Issue #1 above)
 
 ---
@@ -233,6 +233,7 @@ make start-prod   # production-like compose (local build; bakes Auth0 from front
 make pull-prod    # GHCR pull — set SECURESHIP_*_IMAGE in .env first (see DEPLOYMENT.md)
 make start-prod-no-build
 make smoke
+make demo    # Phase 5 edge-case dry-run (stack must be up)
 make stop
 ```
 
@@ -240,7 +241,7 @@ make stop
 
 ## Validation Checklist
 
-- [ ] Two-tool path:
+- [x] Two-tool path:
   - [x] `lookup_shipments` → all for verified customer
   - [x] `get_shipment_status(tracking)` → one / empty; ownership-gated
   - [x] Prompt instructs all vs specific correctly
@@ -309,6 +310,8 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 | `docs/WEEK4_KNOWN_ISSUES.md` | Issue #1 resolution note |
 | `docker-compose.yml` / `.env.example` | Production-like Compose; GHCR image overrides |
 | `scripts/smoke.sh` | Health + chat 422 + admin 401 |
+| `scripts/demo_edge_cases.sh` | Phase 5 edge-case HTTP dry-run + manual checklist |
+| `docs/PROGRAM_COMPLETION.md` | Audit vs original 5-week program |
 | `docs/DEPLOYMENT.md` | Deploy runbook (local / prod-like / GHCR-later) |
 | `docs/API.md` … `LOGGING.md` | Docs pack |
 
@@ -332,7 +335,7 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 
 - [x] Security hardening in place (rate limit, validation, redacted logs, injection tests)
 - [x] Docs + accurate README; mentor can run from README alone
-- [ ] `make start` → seed → demo script works (Phase 5 edge-case pass)
+- [x] `make start` → seed → demo script works (Phase 5: `make demo` + manual browser checklist)
 - [x] **Phase 4:** CI green; images build; Compose smoke documented; GHCR pull path + deploy runbook complete
 - [x] Stretch goals explicitly deferred
 
@@ -347,4 +350,4 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 
 **Last Updated:** 2026-08-26  
 **Branch:** `feat/week5-hardening`  
-**Status:** In Progress — **Phase 4 (DevOps) complete**; Phase 5 edge-case/demo dry-run remains
+**Status:** **Complete** — all Week 5 phases done; see [PROGRAM_COMPLETION.md](PROGRAM_COMPLETION.md)

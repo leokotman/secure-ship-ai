@@ -37,6 +37,14 @@ class Session:
     def verified(self) -> bool:
         return self.state == SessionState.VERIFIED
 
+    @property
+    def has_shipment_access(self) -> bool:
+        """True after SMS verification; preserved through human escalation (Epic G)."""
+        return self.customer_id is not None and self.state in (
+            SessionState.VERIFIED,
+            SessionState.ESCALATED_TO_HUMAN,
+        )
+
 
 class SessionManager:
     """Thread-safe in-memory session store backed by a plain dict.

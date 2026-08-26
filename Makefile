@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint format clean start start-prod start-prod-no-build pull-prod stop nuke seed smoke
+.PHONY: help install dev test lint format clean start start-prod start-prod-no-build pull-prod stop nuke seed smoke demo
 
 # Local demo/dev uses compose base + bind-mount override (hot reload).
 COMPOSE_DEV := docker compose -f docker-compose.yml -f docker-compose.dev.yml
@@ -17,6 +17,7 @@ help:
 	@echo "  make nuke          - stop + wipe database volume (fresh slate)"
 	@echo "  make seed          - Seed DB with sample data (run once while stack is up)"
 	@echo "  make smoke         - Smoke checks (/health, chat validation, admin 401)"
+	@echo "  make demo            - Phase 5 edge-case dry-run (requires stack up)"
 	@echo ""
 	@echo "setup commands:"
 	@echo "  make install       - Install dependencies (backend + frontend)"
@@ -89,6 +90,9 @@ seed:
 
 smoke:
 	bash scripts/smoke.sh
+
+demo:
+	bash scripts/demo_edge_cases.sh
 
 install:
 	@echo "Installing backend..."
