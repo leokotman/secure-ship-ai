@@ -23,15 +23,15 @@ migrate:
 	alembic upgrade head
 
 test:
-	pytest
+	$(PYTHON) -m pytest
 
 lint:
-	ruff check src/
-	mypy src/
+	$(VENV)/bin/ruff check src/
+	$(PYTHON) -m mypy src/
 
 format:
-	black src/
-	ruff check --fix src/
+	$(PYTHON) -m black src/
+	$(VENV)/bin/ruff check --fix src/
 
 clean:
 	rm -rf build/ dist/ *.egg-info/
