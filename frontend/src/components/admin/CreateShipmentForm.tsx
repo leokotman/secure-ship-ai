@@ -1,18 +1,21 @@
 /**
  * Create Shipment Form Component
- * 
+ *
  * Modal form for creating new shipments.
  */
 
 import { useState } from "react";
-import { adminApi } from "../../../lib/adminApi";
+import { adminApi } from "@/lib/adminApi";
 
 interface CreateShipmentFormProps {
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-export default function CreateShipmentForm({ onSuccess, onCancel }: CreateShipmentFormProps) {
+export default function CreateShipmentForm({
+  onSuccess,
+  onCancel,
+}: CreateShipmentFormProps) {
   const [formData, setFormData] = useState({
     customer_id: "",
     tracking_number: "",

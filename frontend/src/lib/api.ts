@@ -46,7 +46,11 @@ export class ChatApiError extends Error {
 
   constructor(
     message: string,
-    options: { status: number; retryAfterSeconds?: number; retryable?: boolean },
+    options: {
+      status: number;
+      retryAfterSeconds?: number;
+      retryable?: boolean;
+    },
   ) {
     super(message);
     this.name = "ChatApiError";
@@ -91,21 +95,29 @@ export async function streamChat(
   }
 
   if (!response.ok) {
-    const retryAfterSeconds = parseRetryAfter(response.headers.get("Retry-After"));
+    const retryAfterSeconds = parseRetryAfter(
+      response.headers.get("Retry-After"),
+    );
     let detail = "";
     try {
-      const body = (await response.json()) as { error?: string; detail?: string };
+      const body = (await response.json()) as {
+        error?: string;
+        detail?: string;
+      };
       detail = body.error || body.detail || "";
     } catch {
       // ignore non-JSON error bodies
     }
 
     if (response.status === 429) {
-      const wait = retryAfterSeconds ? ` Try again in ${retryAfterSeconds}s.` : "";
-      throw new ChatApiError(
-        `You're sending messages too quickly.${wait}`,
-        { status: 429, retryAfterSeconds, retryable: true },
-      );
+      const wait = retryAfterSeconds
+        ? ` Try again in ${retryAfterSeconds}s.`
+        : "";
+      throw new ChatApiError(`You're sending messages too quickly.${wait}`, {
+        status: 429,
+        retryAfterSeconds,
+        retryable: true,
+      });
     }
 
     if (response.status === 400) {

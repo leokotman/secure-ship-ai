@@ -1,6 +1,6 @@
 /**
  * ShipmentsTable Component Tests
- * 
+ *
  * Tests for the shipments table component.
  */
 
@@ -21,7 +21,7 @@ describe("ShipmentsTable", () => {
       estimated_delivery: null,
       last_update: "2024-03-10T10:00:00Z",
       deleted_at: null,
-      packages: []
+      packages: [],
     },
     {
       id: "ship-2",
@@ -34,15 +34,15 @@ describe("ShipmentsTable", () => {
       estimated_delivery: null,
       last_update: "2024-03-11T14:00:00Z",
       deleted_at: null,
-      packages: []
-    }
+      packages: [],
+    },
   ];
 
   const mockHandlers = {
     onToggleExpand: jest.fn(),
     onStatusChange: jest.fn(),
     onAddPackage: jest.fn(),
-    onDelete: jest.fn()
+    onDelete: jest.fn(),
   };
 
   beforeEach(() => {
@@ -55,7 +55,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     expect(screen.getByText(/Tracking #/i)).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     expect(screen.getByText("TRACK-001")).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe("ShipmentsTable", () => {
         shipments={[]}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     expect(screen.getByText(/No shipments found/i)).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     const firstRow = screen.getByText("TRACK-001").closest("tr");
@@ -113,7 +113,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId="ship-1"
         {...mockHandlers}
-      />
+      />,
     );
 
     // First shipment should be expanded (would show packages if any)
@@ -128,13 +128,16 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     const statusSelects = screen.getAllByRole("combobox");
     fireEvent.change(statusSelects[0], { target: { value: "delivered" } });
 
-    expect(mockHandlers.onStatusChange).toHaveBeenCalledWith("ship-1", "delivered");
+    expect(mockHandlers.onStatusChange).toHaveBeenCalledWith(
+      "ship-1",
+      "delivered",
+    );
   });
 
   it("should call onAddPackage with shipment id", () => {
@@ -143,7 +146,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     const addButtons = screen.getAllByRole("button", { name: /Add Package/i });
@@ -158,7 +161,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     const deleteButtons = screen.getAllByRole("button", { name: /Delete/i });
@@ -173,7 +176,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     const table = container.querySelector("table");
@@ -192,7 +195,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     const wrapper = container.querySelector(".overflow-x-auto");
@@ -205,7 +208,7 @@ describe("ShipmentsTable", () => {
         shipments={[mockShipments[0]]}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     expect(screen.getByText("TRACK-001")).toBeInTheDocument();
@@ -222,10 +225,10 @@ describe("ShipmentsTable", () => {
             shipment_id: "ship-1",
             description: "Test Package",
             weight_kg: "1.0",
-            declared_value: "100.00"
-          }
-        ]
-      }
+            declared_value: "100.00",
+          },
+        ],
+      },
     ];
 
     render(
@@ -233,7 +236,7 @@ describe("ShipmentsTable", () => {
         shipments={shipmentsWithPackages}
         expandedShipmentId="ship-1"
         {...mockHandlers}
-      />
+      />,
     );
 
     expect(screen.getByText("Test Package")).toBeInTheDocument();
@@ -245,7 +248,7 @@ describe("ShipmentsTable", () => {
         shipments={mockShipments}
         expandedShipmentId={null}
         {...mockHandlers}
-      />
+      />,
     );
 
     // Verify all action buttons are present (indicating handlers are passed)

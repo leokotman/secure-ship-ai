@@ -1,6 +1,6 @@
 /**
  * Loading Spinner Component
- * 
+ *
  * Centered loading indicator for the dashboard.
  */
 

@@ -27,10 +27,10 @@ Runs on every push and pull request to `main`:
 ### CD Pipeline (`.github/workflows/cd.yml`)
 Runs on push to `main` or version tags:
 
-1. **Build Docker Images** - Backend and frontend containers
-2. **Push to Registry** - GitHub Container Registry (GHCR)
-3. **Deploy to Staging** - Automatic on main branch
-4. **Deploy to Production** - Manual approval on version tags
+1. **Build Docker Images** — Backend and production frontend (multi-stage `next build` + `next start`)
+2. **Push to Registry** — GitHub Container Registry (GHCR)
+3. **Compose deploy readiness** — Prints Compose-based deploy steps; validates `scripts/smoke.sh` syntax (no fake cloud hosts)
+4. **GitHub Release** — On `v*.*.*` tags, with Compose smoke notes
 
 ---
 
@@ -157,19 +157,39 @@ docker pull ghcr.io/YOUR_ORG/secure-ship-ai-backend:main
 docker pull ghcr.io/YOUR_ORG/secure-ship-ai-frontend:main
 ```
 
-### Deployment Environments
+**GitHub Actions Variables (frontend build — Settings → Secrets and variables → Actions → Variables):**
 
-#### Staging Environment
-- **Trigger**: Automatic on push to `main`
-- **URL**: `https://staging.secureship.example.com`
-- **Purpose**: Pre-production testing
-- **Approval**: Not required
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_AUTH0_DOMAIN` | Auth0 tenant (baked into frontend image) |
+| `NEXT_PUBLIC_AUTH0_CLIENT_ID` | Auth0 SPA client id |
+| `NEXT_PUBLIC_AUTH0_AUDIENCE` | Auth0 API audience |
+| `NEXT_PUBLIC_API_URL` | Optional — default `http://localhost:8000` |
+| `NEXT_PUBLIC_BACKEND_URL` | Optional — default `http://localhost:8000` |
 
-#### Production Environment
-- **Trigger**: Manual on version tags (`v*.*.*`)
-- **URL**: `https://secureship.example.com`
-- **Purpose**: Live production
-- **Approval**: Required (configure in GitHub)
+Set these **before** CD runs if you need Auth0 admin or non-localhost URLs in GHCR images.
+
+### Compose-based deploy (no cloud staging/prod hosts)
+
+This program does **not** deploy to `*.secureship.example.com`. After GHCR push, deploy on any host with Docker + Ollama:
+
+```bash
+# repo-root .env (see .env.example)
+SECURESHIP_BACKEND_IMAGE=ghcr.io/YOUR_ORG/secure-ship-ai-backend:main
+SECURESHIP_FRONTEND_IMAGE=ghcr.io/YOUR_ORG/secure-ship-ai-frontend:main
+
+make pull-prod
+make start-prod-no-build
+
+make seed    # first run
+make smoke   # GET /health, POST /chat → 422, GET /admin/shipments → 401
+```
+
+Local build instead of GHCR pull: `make start-prod` (sources `frontend/.env` for Auth0 build args).
+
+Full deploy runbook: [DEPLOYMENT.md](DEPLOYMENT.md).
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for env, CORS, and smoke details.
 
 ---
 

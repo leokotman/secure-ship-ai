@@ -24,13 +24,13 @@ AI-gated shipment support chat. Customers verify identity conversationally (name
 make start
 ```
 
-Starts Ollama (if needed) and the Docker stack (frontend, backend, Postgres).
+Starts Ollama (if needed) and the Docker stack (frontend, backend, Postgres) with the **dev** Compose override (bind mounts + hot reload).
 
 - Frontend: http://localhost:3000  
 - Backend health: http://localhost:8000/health  
 - OpenAPI: http://localhost:8000/openapi.json  
 
-Frontend bind-mount + Next.js dev mode: UI edits hot-reload without rebuilding containers.
+Production-like images (no bind mounts): `make start-prod` (bakes Auth0 from `frontend/.env`). GHCR pull: set `SECURESHIP_*_IMAGE` in `.env` → `make pull-prod && make start-prod-no-build`. Smoke after the stack is up: `make smoke`.
 
 ### Seed the database (first run)
 
@@ -52,6 +52,7 @@ make nuke          # wipe DB volume
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
+cp .env.example .env   # optional — GHCR image overrides for make pull-prod
 ```
 
 Configure as needed:
@@ -95,10 +96,11 @@ See [docs/WEEK4_KNOWN_ISSUES.md](docs/WEEK4_KNOWN_ISSUES.md) and [docs/week5_tas
 
 | Command | What it does |
 |---------|--------------|
-| `make start` / `make stop` / `make nuke` | Compose stack lifecycle |
+| `make start` / `make start-prod` / `make pull-prod` / `make start-prod-no-build` / `make stop` / `make nuke` | Compose stack lifecycle (dev vs production-like vs GHCR pull) |
 | `make seed` | Seed customers + shipments |
+| `make smoke` | Health + chat validation + admin 401 |
 | `make install` | Install backend + frontend deps |
-| `make test` | Run tests |
+| `make test` | Backend + frontend tests |
 | `make lint` / `make format` | Lint / format |
 
 Backend: `cd backend && make dev|test|lint`  

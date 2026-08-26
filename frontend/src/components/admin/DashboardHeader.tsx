@@ -1,6 +1,6 @@
 /**
  * Dashboard Header Component
- * 
+ *
  * Top navigation bar with title and logout.
  */
 

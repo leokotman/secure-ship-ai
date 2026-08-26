@@ -1,0 +1,17 @@
+node_modules
+.next
+coverage
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+Dockerfile*
+.dockerignore
+jest.config.*
+**/*.test.ts
+**/*.test.tsx
+**/__tests__
+.vscode
+.DS_Store

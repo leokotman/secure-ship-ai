@@ -9,20 +9,24 @@
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
-import { adminApi, Shipment, DashboardStats as Stats } from "../../lib/adminApi";
+import {
+  adminApi,
+  Shipment,
+  DashboardStats as Stats,
+} from "../../lib/adminApi";
 import {
   DashboardHeader,
   DashboardStats,
   ShipmentsTable,
-} from "./components";
+} from "@/components/admin";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import ErrorAlert from "../../components/ErrorAlert";
 
 const CreateShipmentForm = dynamic(
-  () => import("./components/CreateShipmentForm"),
+  () => import("@/components/admin/CreateShipmentForm"),
   { ssr: false },
 );
-const PackageForm = dynamic(() => import("./components/PackageForm"), {
+const PackageForm = dynamic(() => import("@/components/admin/PackageForm"), {
   ssr: false,
 });
 
@@ -36,9 +40,13 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [expandedShipmentId, setExpandedShipmentId] = useState<string | null>(null);
+  const [expandedShipmentId, setExpandedShipmentId] = useState<string | null>(
+    null,
+  );
   const [showPackageForm, setShowPackageForm] = useState(false);
-  const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
+  const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(
+    null,
+  );
 
   // Load dashboard data
   const loadDashboard = useCallback(async () => {
@@ -122,7 +130,7 @@ export default function AdminDashboard() {
 
   const handleToggleExpand = (shipmentId: string) => {
     setExpandedShipmentId(
-      expandedShipmentId === shipmentId ? null : shipmentId
+      expandedShipmentId === shipmentId ? null : shipmentId,
     );
   };
 

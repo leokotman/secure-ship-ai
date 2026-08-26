@@ -1,11 +1,11 @@
 /**
  * Package Form Component
- * 
+ *
  * Modal form for creating packages within a shipment.
  */
 
 import { useState } from "react";
-import { adminApi } from "../../../lib/adminApi";
+import { adminApi } from "@/lib/adminApi";
 
 interface PackageFormProps {
   shipmentId: string;
@@ -13,11 +13,15 @@ interface PackageFormProps {
   onCancel: () => void;
 }
 
-export default function PackageForm({ shipmentId, onSuccess, onCancel }: PackageFormProps) {
+export default function PackageForm({
+  shipmentId,
+  onSuccess,
+  onCancel,
+}: PackageFormProps) {
   const [packageData, setPackageData] = useState({
     description: "",
     weight_kg: "",
-    declared_value: ""
+    declared_value: "",
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -32,7 +36,7 @@ export default function PackageForm({ shipmentId, onSuccess, onCancel }: Package
         shipment_id: shipmentId,
         description: packageData.description,
         weight_kg: parseFloat(packageData.weight_kg),
-        declared_value: parseFloat(packageData.declared_value)
+        declared_value: parseFloat(packageData.declared_value),
       });
 
       onSuccess();
@@ -62,7 +66,9 @@ export default function PackageForm({ shipmentId, onSuccess, onCancel }: Package
             <input
               type="text"
               value={packageData.description}
-              onChange={(e) => setPackageData({...packageData, description: e.target.value})}
+              onChange={(e) =>
+                setPackageData({ ...packageData, description: e.target.value })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Electronics, Documents, etc."
               required
@@ -78,7 +84,9 @@ export default function PackageForm({ shipmentId, onSuccess, onCancel }: Package
               step="0.01"
               min="0.01"
               value={packageData.weight_kg}
-              onChange={(e) => setPackageData({...packageData, weight_kg: e.target.value})}
+              onChange={(e) =>
+                setPackageData({ ...packageData, weight_kg: e.target.value })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="2.5"
               required
@@ -94,7 +102,12 @@ export default function PackageForm({ shipmentId, onSuccess, onCancel }: Package
               step="0.01"
               min="0"
               value={packageData.declared_value}
-              onChange={(e) => setPackageData({...packageData, declared_value: e.target.value})}
+              onChange={(e) =>
+                setPackageData({
+                  ...packageData,
+                  declared_value: e.target.value,
+                })
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="100.00"
               required

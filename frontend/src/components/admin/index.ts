@@ -1,7 +1,8 @@
 /**
  * Admin Dashboard Components
- * 
- * Page-specific components for the admin dashboard.
+ *
+ * Components for the admin dashboard (kept outside pages/ so Next.js
+ * does not treat them as routes).
  */
 
 export { default as DashboardHeader } from "./DashboardHeader";

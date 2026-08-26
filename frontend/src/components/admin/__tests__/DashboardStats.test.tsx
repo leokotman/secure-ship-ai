@@ -1,6 +1,6 @@
 /**
  * DashboardStats Component Tests
- * 
+ *
  * Tests for the dashboard statistics cards component.
  */
 
@@ -16,9 +16,9 @@ describe("DashboardStats", () => {
       in_transit: 45,
       out_for_delivery: 15,
       delivered: 65,
-      exception: 5
+      exception: 5,
     },
-    recent_shipments: []
+    recent_shipments: [],
   };
 
   it("should render total shipments count", () => {
@@ -49,13 +49,13 @@ describe("DashboardStats", () => {
     const statsWithMissing: Stats = {
       total_shipments: 10,
       by_status: {
-        delivered: 10
+        delivered: 10,
       },
-      recent_shipments: []
+      recent_shipments: [],
     };
 
     render(<DashboardStats stats={statsWithMissing} />);
-    
+
     // Should show 0 for missing statuses
     expect(screen.getByText(/In Transit/i)).toBeInTheDocument();
     expect(screen.getByText(/Out for Delivery/i)).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe("DashboardStats", () => {
 
   it("should render all stat cards", () => {
     const { container } = render(<DashboardStats stats={mockStats} />);
-    
+
     // Should have 4 stat cards (Total, In Transit, Out for Delivery, Delivered)
     const cards = container.querySelectorAll('[class*="bg-white"]');
     expect(cards.length).toBeGreaterThanOrEqual(4);
@@ -71,12 +71,12 @@ describe("DashboardStats", () => {
 
   it("should display stats with appropriate color coding", () => {
     const { container } = render(<DashboardStats stats={mockStats} />);
-    
+
     // Check for color-coded text (based on the component implementation)
     const blueText = container.querySelector('[class*="text-blue"]');
     const greenText = container.querySelector('[class*="text-green"]');
     const yellowText = container.querySelector('[class*="text-yellow"]');
-    
+
     expect(blueText || greenText || yellowText).toBeInTheDocument();
   });
 });

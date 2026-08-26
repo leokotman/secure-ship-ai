@@ -210,11 +210,15 @@ describe("ChatWindow", () => {
     render(<ChatWindow />);
 
     const input = screen.getByPlaceholderText("Type your message…");
-    fireEvent.change(input, { target: { value: "Tell me about ADMIN-TEST-002" } });
+    fireEvent.change(input, {
+      target: { value: "Tell me about ADMIN-TEST-002" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText(/Showing 1 of 2/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show all" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show all" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("ADMIN-TEST-002")).toBeInTheDocument();
     expect(screen.queryByText("ADMIN-TEST-001")).not.toBeInTheDocument();
 
@@ -231,11 +235,14 @@ describe("ChatWindow", () => {
     });
 
     mockStreamChat.mockRejectedValue(
-      new ChatApiError("You're sending messages too quickly. Try again in 30s.", {
-        status: 429,
-        retryAfterSeconds: 30,
-        retryable: true,
-      }),
+      new ChatApiError(
+        "You're sending messages too quickly. Try again in 30s.",
+        {
+          status: 429,
+          retryAfterSeconds: 30,
+          retryable: true,
+        },
+      ),
     );
 
     render(<ChatWindow />);

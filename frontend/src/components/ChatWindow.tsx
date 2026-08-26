@@ -146,7 +146,10 @@ export function ChatWindow() {
     }, delay);
   }, [chatState, firstName, showEscalationScript]);
 
-  const toChatError = (err: unknown, lastUserMessage?: string): ChatErrorState => {
+  const toChatError = (
+    err: unknown,
+    lastUserMessage?: string,
+  ): ChatErrorState => {
     if (err instanceof ChatApiError) {
       return {
         message: err.message,
@@ -220,7 +223,10 @@ export function ChatWindow() {
     }
   };
 
-  const runSend = async (message: string, opts?: { hideUserEcho?: boolean }) => {
+  const runSend = async (
+    message: string,
+    opts?: { hideUserEcho?: boolean },
+  ) => {
     if (sendLockRef.current || isLoading) return;
     sendLockRef.current = true;
     setIsLoading(true);
@@ -349,8 +355,7 @@ export function ChatWindow() {
               : showAll
                 ? msg.shipments!
                 : cardFilter.visible;
-          const showFilterChrome =
-            cardFilter?.isFiltered === true && !showAll;
+          const showFilterChrome = cardFilter?.isFiltered === true && !showAll;
 
           return (
             <div
@@ -384,9 +389,7 @@ export function ChatWindow() {
                     <div className="mt-2 space-y-2 min-w-0">
                       {showFilterChrome && (
                         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                          <span>
-                            Showing 1 of {cardFilter!.total}
-                          </span>
+                          <span>Showing 1 of {cardFilter!.total}</span>
                           <button
                             type="button"
                             onClick={() =>
@@ -414,7 +417,11 @@ export function ChatWindow() {
         })}
 
         {isLoading && (
-          <div className="flex justify-start" aria-live="polite" aria-busy="true">
+          <div
+            className="flex justify-start"
+            aria-live="polite"
+            aria-busy="true"
+          >
             <div
               className="bg-white text-gray-900 border border-gray-200 px-4 py-2 rounded-lg"
               role="status"

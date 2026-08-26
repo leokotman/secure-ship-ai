@@ -1,10 +1,10 @@
 /**
  * Shipment Row Component
- * 
+ *
  * Individual shipment table row with expand/collapse for packages.
  */
 
-import { Shipment } from "../../../lib/adminApi";
+import { Shipment } from "@/lib/adminApi";
 import PackageList from "./PackageList";
 
 interface ShipmentRowProps {
@@ -34,10 +34,7 @@ export default function ShipmentRow({
 
   return (
     <>
-      <tr
-        className="hover:bg-gray-50 cursor-pointer"
-        onClick={handleRowClick}
-      >
+      <tr className="hover:bg-gray-50 cursor-pointer" onClick={handleRowClick}>
         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
           {shipment.tracking_number}
         </td>

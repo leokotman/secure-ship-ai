@@ -1,6 +1,6 @@
 /**
  * SessionStore Tests
- * 
+ *
  * Tests for the Zustand session state management store (Week 2 feature).
  */
 
@@ -14,7 +14,7 @@ describe("useSessionStore", () => {
       useSessionStore.setState({
         sessionId: "",
         chatState: "anonymous",
-        firstName: null
+        firstName: null,
       });
     });
   });
@@ -66,10 +66,10 @@ describe("useSessionStore", () => {
       "code_sent",
       "awaiting_code",
       "verified",
-      "escalated_to_human"
+      "escalated_to_human",
     ];
 
-    states.forEach(state => {
+    states.forEach((state) => {
       act(() => {
         useSessionStore.setState({ chatState: state as any });
       });
@@ -84,7 +84,7 @@ describe("useSessionStore", () => {
       useSessionStore.setState({
         sessionId: "sess-456",
         chatState: "verified",
-        firstName: "Jane"
+        firstName: "Jane",
       });
     });
 
@@ -110,9 +110,9 @@ describe("useSessionStore", () => {
 
     // Anonymous -> collecting identity
     act(() => {
-      useSessionStore.setState({ 
+      useSessionStore.setState({
         sessionId: "sess-flow",
-        chatState: "anonymous" 
+        chatState: "anonymous",
       });
     });
     expect(result.current.chatState).toBe("anonymous");
@@ -137,9 +137,9 @@ describe("useSessionStore", () => {
 
     // Verified
     act(() => {
-      useSessionStore.setState({ 
+      useSessionStore.setState({
         chatState: "verified",
-        firstName: "Sarah"
+        firstName: "Sarah",
       });
     });
     expect(result.current.chatState).toBe("verified");
@@ -153,7 +153,7 @@ describe("useSessionStore", () => {
       useSessionStore.setState({
         sessionId: "sess-escalated",
         chatState: "escalated_to_human",
-        firstName: "Mike"
+        firstName: "Mike",
       });
     });
 
@@ -182,7 +182,7 @@ describe("useSessionStore", () => {
       useSessionStore.setState({
         sessionId: "sess-persist",
         chatState: "verified",
-        firstName: "Alice"
+        firstName: "Alice",
       });
     });
 

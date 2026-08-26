@@ -1,6 +1,6 @@
 /**
  * LoadingSpinner Component Tests
- * 
+ *
  * Tests for the loading spinner component.
  */
 
@@ -15,18 +15,19 @@ describe("LoadingSpinner", () => {
 
   it("should display loading indicator", () => {
     const { container } = render(<LoadingSpinner />);
-    
+
     // Check for spinner/loading element (adjust selector based on actual implementation)
-    const spinner = container.querySelector('[role="status"]') ||
-                   container.querySelector('.animate-spin') ||
-                   container.querySelector('.spinner');
-    
+    const spinner =
+      container.querySelector('[role="status"]') ||
+      container.querySelector(".animate-spin") ||
+      container.querySelector(".spinner");
+
     expect(spinner || container.firstChild).toBeInTheDocument();
   });
 
   it("should render with accessible loading text", () => {
     const { container } = render(<LoadingSpinner />);
-    
+
     // Should have some indication of loading state
     expect(container.textContent).toBeTruthy();
   });

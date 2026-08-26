@@ -1,6 +1,6 @@
 /**
  * DashboardHeader Component Tests
- * 
+ *
  * Tests for the admin dashboard header component.
  */
 
@@ -21,16 +21,16 @@ describe("DashboardHeader", () => {
   it("should call onLogout when logout button is clicked", () => {
     const onLogout = jest.fn();
     render(<DashboardHeader onLogout={onLogout} />);
-    
+
     const logoutButton = screen.getByRole("button", { name: /logout/i });
     fireEvent.click(logoutButton);
-    
+
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
   it("should render with proper styling", () => {
     const { container } = render(<DashboardHeader onLogout={jest.fn()} />);
-    
+
     const header = container.querySelector("header");
     expect(header).toBeInTheDocument();
   });

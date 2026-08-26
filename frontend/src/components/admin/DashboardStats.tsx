@@ -1,10 +1,10 @@
 /**
  * Dashboard Statistics Cards
- * 
+ *
  * Displays overview statistics for shipments by status.
  */
 
-import { DashboardStats as Stats } from "../../../lib/adminApi";
+import { DashboardStats as Stats } from "@/lib/adminApi";
 
 interface DashboardStatsProps {
   stats: Stats;
@@ -43,7 +43,11 @@ interface StatCardProps {
   className?: string;
 }
 
-function StatCard({ label, value, className = "text-gray-900" }: StatCardProps) {
+function StatCard({
+  label,
+  value,
+  className = "text-gray-900",
+}: StatCardProps) {
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="text-sm font-medium text-gray-500">{label}</div>

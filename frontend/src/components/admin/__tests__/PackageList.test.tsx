@@ -1,6 +1,6 @@
 /**
  * PackageList Component Tests
- * 
+ *
  * Tests for the package list display component.
  */
 
@@ -15,15 +15,15 @@ describe("PackageList", () => {
       shipment_id: "ship-123",
       description: "Electronics",
       weight_kg: "2.5",
-      declared_value: "500.00"
+      declared_value: "500.00",
     },
     {
       id: "pkg-2",
       shipment_id: "ship-123",
       description: "Documents",
       weight_kg: "0.5",
-      declared_value: "50.00"
-    }
+      declared_value: "50.00",
+    },
   ];
 
   it("should render nothing when packages array is empty", () => {
@@ -68,8 +68,8 @@ describe("PackageList", () => {
         shipment_id: "ship-123",
         description: "Single Item",
         weight_kg: "1.0",
-        declared_value: "100.00"
-      }
+        declared_value: "100.00",
+      },
     ];
 
     render(<PackageList packages={singlePackage} />);
@@ -91,7 +91,7 @@ describe("PackageList", () => {
 
   it("should display package information in a readable format", () => {
     render(<PackageList packages={mockPackages} />);
-    
+
     // Check that all information is present for first package
     expect(screen.getByText("Electronics")).toBeInTheDocument();
     expect(screen.getByText(/2.5kg/i)).toBeInTheDocument();
@@ -105,8 +105,8 @@ describe("PackageList", () => {
         shipment_id: "ship-123",
         description: "Fragile Item",
         weight_kg: "0.75",
-        declared_value: "123.45"
-      }
+        declared_value: "123.45",
+      },
     ];
 
     render(<PackageList packages={packagesWithDecimals} />);

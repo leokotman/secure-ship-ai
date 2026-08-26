@@ -1,6 +1,6 @@
 /**
  * ShipmentRow Component Tests
- * 
+ *
  * Tests for the individual shipment table row component.
  */
 
@@ -26,16 +26,16 @@ describe("ShipmentRow", () => {
         shipment_id: "ship-123",
         description: "Electronics",
         weight_kg: "2.5",
-        declared_value: "500.00"
-      }
-    ]
+        declared_value: "500.00",
+      },
+    ],
   };
 
   const mockHandlers = {
     onToggleExpand: jest.fn(),
     onStatusChange: jest.fn(),
     onAddPackage: jest.fn(),
-    onDelete: jest.fn()
+    onDelete: jest.fn(),
   };
 
   beforeEach(() => {
@@ -52,7 +52,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     expect(screen.getByText("1Z999AA10123456784")).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     // Should show first 8 chars of customer_id
@@ -85,7 +85,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     expect(screen.getByText("FedEx")).toBeInTheDocument();
@@ -101,10 +101,12 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
-    expect(screen.getByText(/New York, NY → Los Angeles, CA/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/New York, NY → Los Angeles, CA/i),
+    ).toBeInTheDocument();
   });
 
   it("should render status dropdown", () => {
@@ -117,7 +119,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const statusSelect = screen.getByRole("combobox");
@@ -136,10 +138,12 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
-    expect(screen.getByRole("button", { name: /Add Package/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Add Package/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Delete/i })).toBeInTheDocument();
   });
 
@@ -153,7 +157,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const row = screen.getByText("1Z999AA10123456784").closest("tr");
@@ -172,7 +176,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const statusSelect = screen.getByRole("combobox");
@@ -191,7 +195,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const statusSelect = screen.getByRole("combobox");
@@ -210,7 +214,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const addButton = screen.getByRole("button", { name: /Add Package/i });
@@ -229,7 +233,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const deleteButton = screen.getByRole("button", { name: /Delete/i });
@@ -248,7 +252,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const deleteButton = screen.getByRole("button", { name: /Delete/i });
@@ -267,7 +271,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     expect(screen.getByText("Electronics")).toBeInTheDocument();
@@ -283,7 +287,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     expect(screen.queryByText("Electronics")).not.toBeInTheDocument();
@@ -301,7 +305,7 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     // Should only have one row (the main row, no expanded row)
@@ -319,16 +323,16 @@ describe("ShipmentRow", () => {
             {...mockHandlers}
           />
         </tbody>
-      </table>
+      </table>,
     );
 
     const statusSelect = screen.getByRole("combobox");
     const options = Array.from(statusSelect.querySelectorAll("option"));
 
-    expect(options.some(opt => opt.value === "label_created")).toBe(true);
-    expect(options.some(opt => opt.value === "in_transit")).toBe(true);
-    expect(options.some(opt => opt.value === "out_for_delivery")).toBe(true);
-    expect(options.some(opt => opt.value === "delivered")).toBe(true);
-    expect(options.some(opt => opt.value === "exception")).toBe(true);
+    expect(options.some((opt) => opt.value === "label_created")).toBe(true);
+    expect(options.some((opt) => opt.value === "in_transit")).toBe(true);
+    expect(options.some((opt) => opt.value === "out_for_delivery")).toBe(true);
+    expect(options.some((opt) => opt.value === "delivered")).toBe(true);
+    expect(options.some((opt) => opt.value === "exception")).toBe(true);
   });
 });

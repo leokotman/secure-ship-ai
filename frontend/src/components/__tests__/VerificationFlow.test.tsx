@@ -1,6 +1,6 @@
 /**
  * VerificationFlow Component Tests
- * 
+ *
  * Tests for the SMS verification modal component (Week 2 feature).
  */
 
@@ -27,9 +27,7 @@ describe("VerificationFlow", () => {
   it("should render the verification form", () => {
     useSessionStore.setState({ chatState: "anonymous" });
 
-    const { container } = render(
-      <VerificationFlow onVerified={jest.fn()} />
-    );
+    const { container } = render(<VerificationFlow onVerified={jest.fn()} />);
 
     // Component always renders when mounted (parent decides when to show it)
     expect(container.firstChild).not.toBeNull();
@@ -37,13 +35,13 @@ describe("VerificationFlow", () => {
   });
 
   it("should render verification modal when chatState is code_sent", () => {
-    useSessionStore.setState({ 
+    useSessionStore.setState({
       sessionId: "sess-123",
-      chatState: "code_sent" 
+      chatState: "code_sent",
     });
-    
+
     render(<VerificationFlow onVerified={jest.fn()} />);
-    
+
     expect(screen.getByPlaceholderText(/000000/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /verify/i })).toBeInTheDocument();
   });
@@ -51,7 +49,7 @@ describe("VerificationFlow", () => {
   it("should render verification modal when chatState is awaiting_code", () => {
     useSessionStore.setState({
       sessionId: "sess-123",
-      chatState: "awaiting_code"
+      chatState: "awaiting_code",
     });
 
     render(<VerificationFlow onVerified={jest.fn()} />);
@@ -62,41 +60,41 @@ describe("VerificationFlow", () => {
   it("should accept 6-digit code input", () => {
     useSessionStore.setState({
       sessionId: "sess-123",
-      chatState: "code_sent"
+      chatState: "code_sent",
     });
-    
+
     render(<VerificationFlow onVerified={jest.fn()} />);
-    
+
     const input = screen.getByPlaceholderText(/000000/i);
     fireEvent.change(input, { target: { value: "123456" } });
-    
+
     expect(input).toHaveValue("123456");
   });
 
   it("should call verifySmsCode when verify button is clicked with valid code", async () => {
     useSessionStore.setState({
       sessionId: "sess-456",
-      chatState: "code_sent"
+      chatState: "code_sent",
     });
 
     mockVerifySmsCode.mockResolvedValue({
       verified: true,
-      state: "verified"
+      state: "verified",
     });
 
     const onComplete = jest.fn();
     render(<VerificationFlow onVerified={onComplete} />);
-    
+
     const input = screen.getByPlaceholderText(/000000/i);
     fireEvent.change(input, { target: { value: "123456" } });
-    
+
     const verifyButton = screen.getByRole("button", { name: /verify/i });
     fireEvent.click(verifyButton);
 
     await waitFor(() => {
       expect(mockVerifySmsCode).toHaveBeenCalledWith({
         session_id: "sess-456",
-        code: "123456"
+        code: "123456",
       });
     });
   });
@@ -104,21 +102,21 @@ describe("VerificationFlow", () => {
   it("should display error message when verification fails", async () => {
     useSessionStore.setState({
       sessionId: "sess-789",
-      chatState: "awaiting_code"
+      chatState: "awaiting_code",
     });
 
     mockVerifySmsCode.mockResolvedValue({
       verified: false,
       state: "awaiting_code",
       reason: "invalid_code",
-      remaining_attempts: 2
+      remaining_attempts: 2,
     });
 
     render(<VerificationFlow onVerified={jest.fn()} />);
-    
+
     const input = screen.getByPlaceholderText(/000000/i);
     fireEvent.change(input, { target: { value: "000000" } });
-    
+
     const verifyButton = screen.getByRole("button", { name: /verify/i });
     fireEvent.click(verifyButton);
 
@@ -130,20 +128,20 @@ describe("VerificationFlow", () => {
   it("should call onVerificationComplete when verification succeeds", async () => {
     useSessionStore.setState({
       sessionId: "sess-success",
-      chatState: "code_sent"
+      chatState: "code_sent",
     });
 
     mockVerifySmsCode.mockResolvedValue({
       verified: true,
-      state: "verified"
+      state: "verified",
     });
 
     const onComplete = jest.fn();
     render(<VerificationFlow onVerified={onComplete} />);
-    
+
     const input = screen.getByPlaceholderText(/000000/i);
     fireEvent.change(input, { target: { value: "123456" } });
-    
+
     fireEvent.click(screen.getByRole("button", { name: /verify/i }));
 
     await waitFor(() => {
@@ -154,13 +152,13 @@ describe("VerificationFlow", () => {
   it("should handle max attempts lockout", async () => {
     useSessionStore.setState({
       sessionId: "sess-lockout",
-      chatState: "awaiting_code"
+      chatState: "awaiting_code",
     });
 
     mockVerifySmsCode.mockResolvedValue({
       verified: false,
       state: "collecting_identity",
-      reason: "max_attempts_exceeded"
+      reason: "max_attempts_exceeded",
     });
 
     const onComplete = jest.fn();
@@ -173,7 +171,9 @@ describe("VerificationFlow", () => {
 
     await waitFor(() => {
       // Should show error message
-      expect(screen.getByText(/Too many incorrect attempts/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Too many incorrect attempts/i),
+      ).toBeInTheDocument();
     });
 
     // Chat state should be updated but modal stays open showing error
@@ -185,21 +185,28 @@ describe("VerificationFlow", () => {
   it("should disable verify button while submitting", async () => {
     useSessionStore.setState({
       sessionId: "sess-submit",
-      chatState: "code_sent"
+      chatState: "code_sent",
     });
 
-    mockVerifySmsCode.mockImplementation(() => 
-      new Promise(resolve => setTimeout(() => resolve({
-        verified: true,
-        state: "verified"
-      }), 100))
+    mockVerifySmsCode.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                verified: true,
+                state: "verified",
+              }),
+            100,
+          ),
+        ),
     );
 
     render(<VerificationFlow onVerified={jest.fn()} />);
-    
+
     const input = screen.getByPlaceholderText(/000000/i);
     fireEvent.change(input, { target: { value: "123456" } });
-    
+
     const verifyButton = screen.getByRole("button", { name: /verify/i });
     fireEvent.click(verifyButton);
 
@@ -214,9 +221,7 @@ describe("VerificationFlow", () => {
       chatState: "awaiting_code",
     });
 
-    render(
-      <VerificationFlow onVerified={jest.fn()} onDismiss={onDismiss} />,
-    );
+    render(<VerificationFlow onVerified={jest.fn()} onDismiss={onDismiss} />);
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onDismiss).toHaveBeenCalledTimes(1);

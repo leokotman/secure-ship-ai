@@ -1,0 +1,25 @@
+# Local development override — bind mounts + hot reload.
+# Used by: make start  →  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  backend:
+    volumes:
+      - ./backend/src:/app/src
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic upgrade head && uvicorn secureship.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]

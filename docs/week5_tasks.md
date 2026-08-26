@@ -1,8 +1,21 @@
 # Week 5 Tasks
 
-## Status: In Progress
+## Status: In Progress (Phase 4 complete — Phase 5 edge-case/demo remains)
 
 Week 5 finishes SecureShip for the program deliverable: security hardening, polish, documentation, and DevOps readiness — while keeping the **two-tool** shipment design already in code.
+
+### Phase tracker
+
+| Phase | Scope | Status |
+|-------|--------|--------|
+| 0 | Doc alignment (`week5_tasks.md`, README, known-issue note) | [x] Done |
+| 1 | Backend hardening (tools, rate limit, validation, logging) | [x] Done |
+| 2 | Frontend polish (card filter, a11y, Orval, Auth0 SPA) | [x] Done |
+| 3 | Docs pack (API, ARCHITECTURE, DEPLOYMENT, SECURITY, …) | [x] Done |
+| 4 | DevOps / demo readiness (Docker, Makefile, CD, GHCR pull path) | [x] **Done** |
+| 5 | Edge-case pass + manual demo script dry-run | [ ] Remaining |
+
+**Phase 4 deliverables:** multi-stage frontend Dockerfile, `docker-compose.dev.yml`, `make start-prod` / `make pull-prod` / `make start-prod-no-build`, `make smoke`, GHCR `image:` overrides in Compose, Auth0 build-args wiring, Postgres localhost bind, CD without fake cloud URLs, deployment runbook in [DEPLOYMENT.md](DEPLOYMENT.md) + [CI_CD_SETUP.md](CI_CD_SETUP.md).
 
 Key UX issue (see [WEEK4_KNOWN_ISSUES.md](WEEK4_KNOWN_ISSUES.md) Issue #1): asking about a **specific** shipment still dumps all shipment cards in the UI. Week 5 closes that via tool/prompt alignment + frontend card filtering — **not** by adding `tracking_number` to `lookup_shipments`.
 
@@ -114,17 +127,21 @@ Frontend: when assistant metadata has multiple shipments **and** text mentions e
 
 **Status:** docs pack written (Week 5 Phase 3).
 
-### DevOps & CI/CD
+### DevOps & CI/CD — Phase 4 ✅
 
 **Already in place:** CI lint/type/test + Trivy; CD builds/pushes GHCR images.
 
-#### Week 5 work
+#### Week 5 work (all complete)
 
-- [ ] Fix root Makefile `install` if broken; wire `make test` to frontend tests
-- [ ] Frontend Dockerfile: multi-stage **production** (`next build` + `next start`); keep compose override/profile for bind-mount **dev** if useful
-- [ ] Verify `docker build` for backend + frontend; `make start` / health checks
-- [ ] CD: keep GHCR build/push; replace fake cloud deploys with documented **Compose-based** deploy + smoke (`/health`, chat, admin 401) — no pretend staging URLs
-- [ ] Confirm CI stays green
+- [x] Fix root Makefile `install` if broken; wire `make test` to frontend tests
+- [x] Frontend Dockerfile: multi-stage **production** (`next build` + `next start`); `docker-compose.dev.yml` for bind-mount **dev**
+- [x] Verify `docker build` for backend + frontend; `make start` / `make start-prod` / health checks / `make smoke`
+- [x] CD: keep GHCR build/push; replace fake cloud deploys with documented **Compose-based** deploy + smoke (`/health`, chat 422, admin 401) — no pretend staging URLs
+- [x] Confirm CI stays green (local parity: lint/type/test; image builds verified)
+- [x] GHCR pull path: `SECURESHIP_*_IMAGE` in repo-root `.env.example`; Compose `image:` + `build:`; `make pull-prod` / `make start-prod-no-build`
+- [x] Auth0 in production frontend: `NEXT_PUBLIC_AUTH0_*` Docker build args; `make start-prod` sources `frontend/.env`; CD GitHub Variables documented
+- [x] Postgres localhost-only bind (`127.0.0.1:5432`) for production-like Compose
+- [x] Deployment runbook: [DEPLOYMENT.md](DEPLOYMENT.md) (local dev / local prod / GHCR-later paths); [CI_CD_SETUP.md](CI_CD_SETUP.md) cross-linked
 
 ### Testing
 
@@ -153,7 +170,7 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 - [x] Accurate root README (Ollama runtime, not Anthropic chat)
 - [x] Docs pack + regenerated diagrams
 - [x] Orval types wired where practical
-- [ ] Prod-capable frontend Dockerfile
+- [x] Prod-capable frontend Dockerfile
 - [ ] Edge-case pass + demo script dry-run
 - [x] WEEK4 known-issue resolution note (this file + Issue #1 above)
 
@@ -185,7 +202,7 @@ Items required by the original program / DEV_PLAN that Week 5 still owns:
 | Shipment UX (specific query) | [x] Two-tool tests/prompt done; [x] frontend card filter |
 | API / Architecture / Deploy / Security / Runbook / Troubleshooting | [x] Docs pack written |
 | CI | [x] Present — keep green |
-| CD | [x] Image push — [ ] Compose smoke docs, no fake cloud URLs |
+| CD | [x] Image push + Compose smoke docs; no fake cloud URLs |
 | Responsive / a11y / loading-error UX | [x] Frontend polish |
 | Orval | [x] Regenerate + wire types |
 | Customer signup/login | Rejected (no end-user accounts) |
@@ -211,7 +228,11 @@ cd ../frontend && npm run lint && npm run type-check && npm test -- --coverage
 
 ```bash
 docker build -t secureship-backend ./backend
-docker build -t secureship-frontend ./frontend
+docker build -t secureship-frontend -f frontend/Dockerfile ./frontend
+make start-prod   # production-like compose (local build; bakes Auth0 from frontend/.env)
+make pull-prod    # GHCR pull — set SECURESHIP_*_IMAGE in .env first (see DEPLOYMENT.md)
+make start-prod-no-build
+make smoke
 make stop
 ```
 
@@ -231,7 +252,7 @@ make stop
 - [x] CORS env-driven
 - [x] a11y + responsive smoke
 - [x] Docs pack complete; README accurate
-- [ ] CI green; Docker images build; Compose demo-ready
+- [x] CI green; Docker images build; Compose demo-ready (`make smoke`)
 
 ---
 
@@ -286,6 +307,9 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 | `backend/tests/test_rate_limiting.py` | **NEW** |
 | `frontend/src/components/ChatWindow.tsx` | Card filtering + Show all |
 | `docs/WEEK4_KNOWN_ISSUES.md` | Issue #1 resolution note |
+| `docker-compose.yml` / `.env.example` | Production-like Compose; GHCR image overrides |
+| `scripts/smoke.sh` | Health + chat 422 + admin 401 |
+| `docs/DEPLOYMENT.md` | Deploy runbook (local / prod-like / GHCR-later) |
 | `docs/API.md` … `LOGGING.md` | Docs pack |
 
 ---
@@ -297,7 +321,9 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 | Docs still say `lookup_shipments(tracking_number=…)` | This file + WEEK4 note — implement against two-tool design only |
 | Rate limit too strict for demos | 30/min per session; document IP+session for prod |
 | Frontend shows all cards after correct tool call | Filter helper + metadata preference |
-| CD fake staging URLs | Document Compose smoke instead of pretend hosts |
+| CD fake staging URLs | Document Compose smoke + `make pull-prod` instead of pretend hosts |
+| Auth0 missing in prod frontend image | Set `NEXT_PUBLIC_AUTH0_*` before `make start-prod` rebuild; see DEPLOYMENT.md |
+| GHCR pull does nothing | Set `SECURESHIP_BACKEND_IMAGE` / `SECURESHIP_FRONTEND_IMAGE` in repo-root `.env` |
 | Prompt injection “false positives” in CI | Tool-layer assertions in CI; live Ollama optional/manual |
 
 ---
@@ -306,9 +332,9 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 
 - [x] Security hardening in place (rate limit, validation, redacted logs, injection tests)
 - [x] Docs + accurate README; mentor can run from README alone
-- [ ] `make start` → seed → demo script works
-- [ ] CI green; images build; Compose smoke documented
-- [ ] Stretch goals explicitly deferred
+- [ ] `make start` → seed → demo script works (Phase 5 edge-case pass)
+- [x] **Phase 4:** CI green; images build; Compose smoke documented; GHCR pull path + deploy runbook complete
+- [x] Stretch goals explicitly deferred
 
 ---
 
@@ -319,6 +345,6 @@ Network down → retry UI; keyboard + Escape on modal; 375px no horizontal scrol
 
 ---
 
-**Last Updated:** 2026-08-25  
+**Last Updated:** 2026-08-26  
 **Branch:** `feat/week5-hardening`  
-**Status:** In Progress
+**Status:** In Progress — **Phase 4 (DevOps) complete**; Phase 5 edge-case/demo dry-run remains

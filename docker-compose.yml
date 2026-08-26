@@ -1,3 +1,8 @@
+# Production-like Compose stack (no source bind mounts).
+# Local hot-reload: `make start` merges docker-compose.dev.yml.
+#
+# GHCR pull (after CD): set image overrides, then `make pull-prod && make start-prod-no-build`
+# See .env.example and docs/DEPLOYMENT.md.
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,8 +10,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: secureship
+    # Localhost only — reachable for `make seed` from the host, not on all interfaces.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +22,7 @@ services:
       retries: 10
 
   backend:
+    image: ${SECURESHIP_BACKEND_IMAGE:-secureship-backend:local}
     build:
       context: ./backend
     env_file:
@@ -26,31 +33,56 @@ services:
       PYTHONUNBUFFERED: "1"
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend/src:/app/src  # live-reload: source changes apply without rebuild
-    command: ["sh", "-c", "alembic upgrade head && uvicorn secureship.main:app --host 0.0.0.0 --port 8000 --reload"]
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   frontend:
+    image: ${SECURESHIP_FRONTEND_IMAGE:-secureship-frontend:local}
     build:
       context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
+        NEXT_PUBLIC_AUTH0_DOMAIN: ${NEXT_PUBLIC_AUTH0_DOMAIN:-}
+        NEXT_PUBLIC_AUTH0_CLIENT_ID: ${NEXT_PUBLIC_AUTH0_CLIENT_ID:-}
+        NEXT_PUBLIC_AUTH0_AUDIENCE: ${NEXT_PUBLIC_AUTH0_AUDIENCE:-}
     env_file:
       - ./frontend/.env
     environment:
       BACKEND_API_URL: http://backend:8000
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      CHOKIDAR_USEPOLLING: "true"
-      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000',(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   pgdata:

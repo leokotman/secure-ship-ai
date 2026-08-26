@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,63 +69,92 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
           tags: ${{ steps.frontend-meta.outputs.tags }}
           labels: ${{ steps.frontend-meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+            NEXT_PUBLIC_BACKEND_URL=${{ vars.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000' }}
+            NEXT_PUBLIC_AUTH0_DOMAIN=${{ vars.NEXT_PUBLIC_AUTH0_DOMAIN }}
+            NEXT_PUBLIC_AUTH0_CLIENT_ID=${{ vars.NEXT_PUBLIC_AUTH0_CLIENT_ID }}
+            NEXT_PUBLIC_AUTH0_AUDIENCE=${{ vars.NEXT_PUBLIC_AUTH0_AUDIENCE }}
 
-  deploy-staging:
+  # No cloud staging/prod hosts in this program. Document Compose deploy + validate smoke script.
+  compose-deploy-ready:
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.ref == 'refs/heads/main'
-    environment:
-      name: staging
-      url: https://staging.secureship.example.com
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to staging
-        run: |
-          echo "Deploy to staging environment"
-          # Add your deployment script here
-          # Examples:
-          # - SSH to server and docker-compose pull && docker-compose up -d
-          # - Use kubectl for Kubernetes
-          # - Use AWS ECS/Fargate
-          # - Use Vercel/Netlify for frontend
-          
-      - name: Run smoke tests
-        run: |
-          echo "Running smoke tests on staging"
-          # Add smoke tests here
-          # curl https://staging.secureship.example.com/health
+      - name: Validate smoke script syntax
+        run: bash -n scripts/smoke.sh
 
-  deploy-production:
+      - name: Print Compose-based deploy steps
+        run: |
+          cat <<'EOF'
+          ============================================================
+          SecureShip — Compose-based deploy (no cloud hosts configured)
+          ============================================================
+
+          Images (GHCR):
+            ghcr.io/<owner>/<repo>-backend:<tag>
+            ghcr.io/<owner>/<repo>-frontend:<tag>
+
+          On a host with Docker + Ollama (qwen3:8b) + env files:
+
+            1. Set GHCR image overrides in repo-root .env (see .env.example):
+                 SECURESHIP_BACKEND_IMAGE=ghcr.io/<owner>/<repo>-backend:<tag>
+                 SECURESHIP_FRONTEND_IMAGE=ghcr.io/<owner>/<repo>-frontend:<tag>
+
+            2. Pull and start (no local rebuild):
+                 make pull-prod
+                 make start-prod-no-build
+                 # or local build instead: make start-prod
+
+            3. Seed (first run):
+                 make seed
+
+            4. Smoke:
+                 make smoke
+                 # or: BACKEND_URL=http://localhost:8000 ./scripts/smoke.sh
+
+          Frontend Auth0 in GHCR images: set GitHub repo Variables
+          NEXT_PUBLIC_AUTH0_DOMAIN, NEXT_PUBLIC_AUTH0_CLIENT_ID, NEXT_PUBLIC_AUTH0_AUDIENCE
+          (and optional NEXT_PUBLIC_API_URL / NEXT_PUBLIC_BACKEND_URL for non-localhost hosts)
+          before the CD build — they are baked at `next build` time.
+
+          Smoke covers:
+            - GET  /health
+            - POST /chat with empty message → 422
+            - GET  /admin/shipments without token → 401
+            - optional frontend :3000 reachability
+
+          Full notes: docs/DEPLOYMENT.md
+          ============================================================
+          EOF
+
+  release-notes:
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, compose-deploy-ready]
     if: startsWith(github.ref, 'refs/tags/v')
-    environment:
-      name: production
-      url: https://secureship.example.com
-    
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Deploy to production
-        run: |
-          echo "Deploy to production environment"
-          # Add your production deployment script here
-          
-      - name: Run smoke tests
-        run: |
-          echo "Running smoke tests on production"
-          # Add smoke tests here
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
+          body: |
+            ## Deploy (Compose)
+
+            1. Set `SECURESHIP_BACKEND_IMAGE` / `SECURESHIP_FRONTEND_IMAGE` in `.env` (see `.env.example`)
+            2. `make pull-prod && make start-prod-no-build` (host Ollama required)
+            3. `make seed` (first run)
+            4. `make smoke`
+
+            For Auth0 admin in the frontend image, configure GitHub repo Variables before CD build.
+            See `docs/DEPLOYMENT.md`. Cloud staging/prod URLs are intentionally not used.

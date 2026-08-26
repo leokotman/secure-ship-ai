@@ -132,9 +132,9 @@ export default function AdminAuthPage() {
 
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
           <p className="text-xs text-blue-800">
-            <strong>Note:</strong> Prefer Login with Auth0 when env vars are set.
-            Manual token paste is for local/demo only. Tokens are verified on
-            each admin API call (no backend refresh endpoint).
+            <strong>Note:</strong> Prefer Login with Auth0 when env vars are
+            set. Manual token paste is for local/demo only. Tokens are verified
+            on each admin API call (no backend refresh endpoint).
           </p>
         </div>
       </div>

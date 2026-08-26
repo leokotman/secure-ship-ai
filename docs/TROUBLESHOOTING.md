@@ -4,16 +4,18 @@
 
 | Symptom | Check |
 |---------|--------|
-| `make start` fails | Docker Desktop running? |
+| `make start` fails | Docker Desktop running? Use `make start-prod` for production images (no bind mounts). |
 | Backend unhealthy | `docker compose logs backend` — Alembic / Postgres |
 | Postgres not ready | Wait for healthcheck; `docker compose ps` |
 | Port in use | Free `:3000`, `:8000`, `:5432` or change mappings |
+| Frontend image build fails (SWC) | Production Dockerfile installs platform SWC from Next optionalDeps; rebuild with `docker build -f frontend/Dockerfile ./frontend` |
 
 ```bash
 make stop
 make nuke   # only if wiping DB is OK
-make start
+make start  # or: make start-prod
 make seed
+make smoke  # /health, chat 422, admin 401
 ```
 
 ## Ollama / chat timeouts
@@ -61,11 +63,11 @@ curl -sf http://localhost:8000/health
 | Symptom | Fix |
 |---------|-----|
 | Immediate 401 | Missing/invalid Bearer; paste fresh Auth0 API test token |
-| Auth0 button missing | Set `NEXT_PUBLIC_AUTH0_DOMAIN`, `CLIENT_ID`, `AUDIENCE` |
+| Auth0 button missing | Set `NEXT_PUBLIC_AUTH0_*` in `frontend/.env`; for **`make start-prod`**, rebuild after changes (vars are baked at `next build`) |
 | Callback error | Redirect URI must be `{origin}/admin/callback` in Auth0 app settings |
 | Backend Auth0 misconfig | `AUTH0_DOMAIN` / `AUDIENCE` must match token |
 
-Remember: backend `/admin/login` and `/admin/callback` are **unused**; use the SPA routes.
+Remember: backend `/admin/login` and `/admin/callback` are **unused**; use the SPA routes. See [DEPLOYMENT.md](DEPLOYMENT.md#local-production-like-with-auth0-admin).
 
 ## Shipment cards show everything
 

@@ -1,6 +1,6 @@
 /**
  * ShipmentDisplay Component Tests
- * 
+ *
  * Tests for shipment data display component (Week 3 feature).
  */
 
@@ -24,9 +24,9 @@ describe("ShipmentDisplay", () => {
         shipment_id: "ship-123",
         description: "Electronics",
         weight_kg: "2.5",
-        declared_value: "500.00"
-      }
-    ]
+        declared_value: "500.00",
+      },
+    ],
   };
 
   it("should render shipment tracking number", () => {
@@ -72,16 +72,16 @@ describe("ShipmentDisplay", () => {
           shipment_id: "ship-123",
           description: "Electronics",
           weight_kg: "2.5",
-          declared_value: "500.00"
+          declared_value: "500.00",
         },
         {
           id: "pkg-2",
           shipment_id: "ship-123",
           description: "Documents",
           weight_kg: "0.5",
-          declared_value: "50.00"
-        }
-      ]
+          declared_value: "50.00",
+        },
+      ],
     };
 
     render(<ShipmentDisplay shipment={shipmentWithMultiplePackages} />);
@@ -92,27 +92,32 @@ describe("ShipmentDisplay", () => {
   it("should render without packages", () => {
     const shipmentNoPackages = {
       ...mockShipment,
-      packages: []
+      packages: [],
     };
 
-    const { container } = render(<ShipmentDisplay shipment={shipmentNoPackages} />);
+    const { container } = render(
+      <ShipmentDisplay shipment={shipmentNoPackages} />,
+    );
     expect(container).toBeInTheDocument();
     expect(screen.getByText(/1Z999AA10123456784/i)).toBeInTheDocument();
   });
 
   it("should display status with appropriate styling", () => {
     const { container } = render(<ShipmentDisplay shipment={mockShipment} />);
-    
+
     // Check for status badge or styled element
-    const statusElement = container.querySelector('[class*="status"]') ||
-                         container.querySelector('[class*="badge"]');
-    expect(statusElement || screen.getByText(/in transit/i)).toBeInTheDocument();
+    const statusElement =
+      container.querySelector('[class*="status"]') ||
+      container.querySelector('[class*="badge"]');
+    expect(
+      statusElement || screen.getByText(/in transit/i),
+    ).toBeInTheDocument();
   });
 
   it("should render delivered status differently", () => {
     const deliveredShipment = {
       ...mockShipment,
-      status: "delivered" as const
+      status: "delivered" as const,
     };
 
     render(<ShipmentDisplay shipment={deliveredShipment} />);

@@ -1,6 +1,6 @@
 /**
  * Admin Dashboard Integration Tests
- * 
+ *
  * Tests for the main admin dashboard page (Week 4 feature).
  */
 
@@ -11,7 +11,7 @@ import { adminApi } from "@/lib/adminApi";
 
 // Mock Next.js router
 jest.mock("next/router", () => ({
-  useRouter: jest.fn()
+  useRouter: jest.fn(),
 }));
 
 // Mock adminApi
@@ -21,14 +21,14 @@ jest.mock("@/lib/adminApi", () => ({
     getDashboardStats: jest.fn(),
     listShipments: jest.fn(),
     deleteShipment: jest.fn(),
-    updateShipment: jest.fn()
-  }
+    updateShipment: jest.fn(),
+  },
 }));
 
 // Mock child components to simplify testing
 jest.mock("@/components/LoadingSpinner", () => ({
   __esModule: true,
-  default: () => <div>Loading...</div>
+  default: () => <div>Loading...</div>,
 }));
 
 jest.mock("@/components/ErrorAlert", () => ({
@@ -39,7 +39,7 @@ jest.mock("@/components/ErrorAlert", () => ({
         {error}
         <button onClick={onDismiss}>Dismiss</button>
       </div>
-    ) : null
+    ) : null,
 }));
 
 describe("AdminDashboard", () => {
@@ -48,7 +48,7 @@ describe("AdminDashboard", () => {
     push: mockPush,
     pathname: "/admin/dashboard",
     query: {},
-    asPath: "/admin/dashboard"
+    asPath: "/admin/dashboard",
   };
 
   const mockStats = {
@@ -57,9 +57,9 @@ describe("AdminDashboard", () => {
       in_transit: 30,
       out_for_delivery: 20,
       delivered: 45,
-      label_created: 5
+      label_created: 5,
     },
-    recent_shipments: []
+    recent_shipments: [],
   };
 
   const mockShipments = [
@@ -74,7 +74,7 @@ describe("AdminDashboard", () => {
       estimated_delivery: null,
       last_update: "2024-03-10T10:00:00Z",
       deleted_at: null,
-      packages: []
+      packages: [],
     },
     {
       id: "ship-2",
@@ -87,8 +87,8 @@ describe("AdminDashboard", () => {
       estimated_delivery: null,
       last_update: "2024-03-11T14:00:00Z",
       deleted_at: null,
-      packages: []
-    }
+      packages: [],
+    },
   ];
 
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe("AdminDashboard", () => {
       shipments: mockShipments,
       total: 2,
       page: 1,
-      page_size: 50
+      page_size: 50,
     });
   });
 
@@ -129,7 +129,7 @@ describe("AdminDashboard", () => {
 
   it("should display loading spinner while loading", () => {
     (adminApi.getDashboardStats as jest.Mock).mockImplementation(
-      () => new Promise(() => {}) // Never resolves
+      () => new Promise(() => {}), // Never resolves
     );
 
     render(<AdminDashboard />);
@@ -162,7 +162,9 @@ describe("AdminDashboard", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/SecureShip Admin/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Logout/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Logout/i }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -170,7 +172,9 @@ describe("AdminDashboard", () => {
     render(<AdminDashboard />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Logout/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Logout/i }),
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Logout/i }));
@@ -183,15 +187,17 @@ describe("AdminDashboard", () => {
     render(<AdminDashboard />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Create Shipment/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Create Shipment/i }),
+      ).toBeInTheDocument();
     });
 
-    const createButton = screen.getByRole("button", { name: /Create Shipment/i });
+    const createButton = screen.getByRole("button", {
+      name: /Create Shipment/i,
+    });
     fireEvent.click(createButton);
 
-    expect(
-      await screen.findByText(/Create New Shipment/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Create New Shipment/i)).toBeInTheDocument();
 
     // Click cancel button to hide (get the close X button)
     const closeButton = screen.getByText("✕");
@@ -206,15 +212,16 @@ describe("AdminDashboard", () => {
     });
 
     // Get the filter dropdown (the one with "All Status" option)
-    const statusFilter = screen.getByDisplayValue("All Status") || 
-                        screen.getAllByRole("combobox")[0];
+    const statusFilter =
+      screen.getByDisplayValue("All Status") ||
+      screen.getAllByRole("combobox")[0];
     fireEvent.change(statusFilter, { target: { value: "delivered" } });
 
     await waitFor(() => {
       expect(adminApi.listShipments).toHaveBeenCalledWith({
         status: "delivered",
         page: 1,
-        page_size: 50
+        page_size: 50,
       });
     });
   });
@@ -234,7 +241,7 @@ describe("AdminDashboard", () => {
     fireEvent.click(deleteButtons[0]);
 
     expect(confirmSpy).toHaveBeenCalled();
-    
+
     await waitFor(() => {
       expect(adminApi.deleteShipment).toHaveBeenCalledWith("ship-1");
     });
@@ -273,7 +280,7 @@ describe("AdminDashboard", () => {
 
     await waitFor(() => {
       expect(adminApi.updateShipment).toHaveBeenCalledWith("ship-1", {
-        status: "delivered"
+        status: "delivered",
       });
     });
   });
@@ -282,9 +289,9 @@ describe("AdminDashboard", () => {
     (adminApi.getDashboardStats as jest.Mock).mockRejectedValue({
       response: {
         data: {
-          detail: "Failed to load data"
-        }
-      }
+          detail: "Failed to load data",
+        },
+      },
     });
 
     render(<AdminDashboard />);
@@ -300,9 +307,9 @@ describe("AdminDashboard", () => {
       response: {
         status: 401,
         data: {
-          detail: "Unauthorized"
-        }
-      }
+          detail: "Unauthorized",
+        },
+      },
     });
 
     render(<AdminDashboard />);
@@ -317,9 +324,9 @@ describe("AdminDashboard", () => {
     (adminApi.getDashboardStats as jest.Mock).mockRejectedValue({
       response: {
         data: {
-          detail: "Test error"
-        }
-      }
+          detail: "Test error",
+        },
+      },
     });
 
     render(<AdminDashboard />);
@@ -342,12 +349,16 @@ describe("AdminDashboard", () => {
       expect(screen.getByText("TRACK-001")).toBeInTheDocument();
     });
 
-    const addPackageButtons = screen.getAllByRole("button", { name: /Add Package/i });
+    const addPackageButtons = screen.getAllByRole("button", {
+      name: /Add Package/i,
+    });
     fireEvent.click(addPackageButtons[0]);
 
     // Package form modal should appear with heading
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Add Package/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Add Package/i }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -361,17 +372,17 @@ describe("AdminDashboard", () => {
             shipment_id: "ship-1",
             description: "Test Package",
             weight_kg: "1.0",
-            declared_value: "100.00"
-          }
-        ]
-      }
+            declared_value: "100.00",
+          },
+        ],
+      },
     ];
 
     (adminApi.listShipments as jest.Mock).mockResolvedValue({
       shipments: shipmentsWithPackages,
       total: 1,
       page: 1,
-      page_size: 50
+      page_size: 50,
     });
 
     render(<AdminDashboard />);
